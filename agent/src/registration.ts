@@ -26,11 +26,11 @@ export async function registerWithDashboard(
       return true;
     } else {
       const error = await res.text();
-      console.error(`[${agent.name}] Registration failed (${res.status}): ${error}`);
+      console.log(`[${agent.name}] Registration failed (${res.status}): ${error}`);
       return false;
     }
-  } catch (err) {
-    console.error(`[${agent.name}] Registration error:`, err);
+  } catch (err: any) {
+    console.log(`[${agent.name}] Registration error: ${err.message || err}`);
     return false;
   }
 }
