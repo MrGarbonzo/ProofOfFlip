@@ -1,0 +1,12 @@
+{
+  "name": "proof-of-flip",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": ["shared", "agent", "dashboard"],
+  "scripts": {
+    "build": "npm run build -w shared && npm run build -w agent && npm run build -w dashboard",
+    "build:shared": "npm run build -w shared",
+    "dev:dashboard": "npm run dev -w dashboard",
+    "dev:agent": "npm run dev -w agent"
+  }
+}

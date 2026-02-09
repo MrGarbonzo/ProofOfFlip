@@ -1,0 +1,56 @@
+name: Build and Push Docker Images
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/mrgarbonzo/proofofflip
+
+jobs:
+  build-agent:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: agent/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/mrgarbonzo/proofofflip/agent:latest
+            ghcr.io/mrgarbonzo/proofofflip/agent:${{ github.sha }}
+          build-args: |
+            DOCKER_IMAGE=ghcr.io/mrgarbonzo/proofofflip/agent:${{ github.sha }}
+
+  build-dashboard:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: dashboard/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/mrgarbonzo/proofofflip/dashboard:latest
+            ghcr.io/mrgarbonzo/proofofflip/dashboard:${{ github.sha }}
+

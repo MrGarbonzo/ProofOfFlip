@@ -1,0 +1,73 @@
+services:
+  dashboard:
+    build:
+      context: .
+      dockerfile: dashboard/Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - DASHBOARD_PORT=3000
+      - TEE_PROVIDER=mock
+      - STORAGE_PATH=/data
+    volumes:
+      - dashboard-data:/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/stats').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 3s
+      timeout: 2s
+      retries: 10
+    networks:
+      - flipnet
+
+  alice:
+    build:
+      context: .
+      dockerfile: agent/Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      - AGENT_NAME=alice
+      - AGENT_PORT=3001
+      - AGENT_ENDPOINT=http://alice:3001
+      - DASHBOARD_URL=http://dashboard:3000
+      - TEE_PROVIDER=mock
+      - STORAGE_PATH=/secretvm/data
+      - DOCKER_IMAGE=${DOCKER_IMAGE:-ghcr.io/proofofflip/agent:local}
+    volumes:
+      - alice-data:/secretvm/data
+    depends_on:
+      dashboard:
+        condition: service_healthy
+    networks:
+      - flipnet
+
+  bob:
+    build:
+      context: .
+      dockerfile: agent/Dockerfile
+    ports:
+      - "3002:3002"
+    environment:
+      - AGENT_NAME=bob
+      - AGENT_PORT=3002
+      - AGENT_ENDPOINT=http://bob:3002
+      - DASHBOARD_URL=http://dashboard:3000
+      - TEE_PROVIDER=mock
+      - STORAGE_PATH=/secretvm/data
+      - DOCKER_IMAGE=${DOCKER_IMAGE:-ghcr.io/proofofflip/agent:local}
+    volumes:
+      - bob-data:/secretvm/data
+    depends_on:
+      dashboard:
+        condition: service_healthy
+    networks:
+      - flipnet
+
+volumes:
+  dashboard-data:
+  alice-data:
+  bob-data:
+
+networks:
+  flipnet:
+    driver: bridge
