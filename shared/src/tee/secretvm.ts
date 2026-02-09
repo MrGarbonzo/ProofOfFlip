@@ -26,6 +26,7 @@ export class SecretVMTEEProvider implements TEEProvider {
 
   private cachedPubkey: string | null = null;
   private cachedQuote: string | null = null;
+  private cachedHtml: string | null = null;
 
   constructor(config?: {
     attestUrl?: string;
@@ -39,12 +40,27 @@ export class SecretVMTEEProvider implements TEEProvider {
     this.quotePath = config?.quotePath || SECRETVM_QUOTE_PATH;
   }
 
-  async getRTMR3(): Promise<string> {
+  /** Fetch and cache /cpu.html once — all fields are extracted from this */
+  private async getAttestHtml(): Promise<string> {
+    if (this.cachedHtml) return this.cachedHtml;
     const url = `${this.attestUrl}/cpu.html`;
     console.log(`[SecretVM] Fetching attestation from ${url}...`);
+    this.cachedHtml = await this.fetchInsecure(url);
+    return this.cachedHtml;
+  }
 
-    // Use Node https module directly — native fetch doesn't support self-signed certs
-    const html = await this.fetchInsecure(url);
+  /** Extract raw quote hex from the cached HTML */
+  private async getRawQuoteHex(): Promise<string> {
+    const html = await this.getAttestHtml();
+    const quoteMatch = html.match(/<pre[^>]*id="quoteTextarea"[^>]*>([\s\S]*?)<\/pre>/i);
+    if (!quoteMatch) {
+      throw new Error(`Could not find raw quote in attestation HTML (${html.length} chars)`);
+    }
+    return quoteMatch[1].replace(/\s/g, '');
+  }
+
+  async getRTMR3(): Promise<string> {
+    const html = await this.getAttestHtml();
     return this.parseRTMR3FromHtml(html);
   }
 
@@ -75,8 +91,9 @@ export class SecretVMTEEProvider implements TEEProvider {
     const quoteMatch = html.match(/<pre[^>]*id="quoteTextarea"[^>]*>([\s\S]*?)<\/pre>/i);
     if (quoteMatch) {
       const rawHex = quoteMatch[1].replace(/\s/g, '');
-      // TDX quote structure: RTMR3 is at byte offset 472, 48 bytes
-      const rtmr3 = rawHex.substring(472 * 2, (472 + 48) * 2);
+      // TDX quote: 48-byte header (96 hex), then body. RTMR3 at body offset 472, 48 bytes
+      const BODY_START = 96; // 48 bytes * 2
+      const rtmr3 = rawHex.substring(BODY_START + 472 * 2, BODY_START + (472 + 48) * 2);
       console.log(`[SecretVM] RTMR3 parsed from raw quote`);
       return rtmr3.toLowerCase();
     }
@@ -87,25 +104,55 @@ export class SecretVMTEEProvider implements TEEProvider {
   async getTeePubkey(): Promise<string> {
     if (this.cachedPubkey) return this.cachedPubkey;
 
-    console.log(`[SecretVM] Reading TEE pubkey from ${this.pubkeyPath}...`);
-    const pem = fs.readFileSync(this.pubkeyPath, 'utf-8');
-    // Extract raw key bytes from PEM — strip header/footer and decode base64
-    const b64 = pem
-      .replace(/-----BEGIN PUBLIC KEY-----/, '')
-      .replace(/-----END PUBLIC KEY-----/, '')
-      .replace(/\s/g, '');
-    // Ed25519 DER-encoded public key: 12-byte header + 32-byte key
-    const der = Buffer.from(b64, 'base64');
-    const rawKey = der.subarray(der.length - 32);
-    this.cachedPubkey = rawKey.toString('hex');
+    // Try reading from mounted PEM file first
+    try {
+      if (fs.existsSync(this.pubkeyPath)) {
+        console.log(`[SecretVM] Reading TEE pubkey from ${this.pubkeyPath}...`);
+        const pem = fs.readFileSync(this.pubkeyPath, 'utf-8');
+        const b64 = pem
+          .replace(/-----BEGIN PUBLIC KEY-----/, '')
+          .replace(/-----END PUBLIC KEY-----/, '')
+          .replace(/\s/g, '');
+        const der = Buffer.from(b64, 'base64');
+        const rawKey = der.subarray(der.length - 32);
+        this.cachedPubkey = rawKey.toString('hex');
+        return this.cachedPubkey;
+      }
+    } catch (err: any) {
+      console.warn(`[SecretVM] Could not read pubkey file: ${err.message}`);
+    }
+
+    // Extract from TDX quote REPORTDATA (first 32 bytes = 64 hex chars of ed25519 pubkey)
+    console.log('[SecretVM] Extracting TEE pubkey from quote REPORTDATA...');
+    const rawHex = await this.getRawQuoteHex();
+    // TDX quote: 48-byte header (96 hex), then body. REPORTDATA at body offset 520, 64 bytes
+    const BODY_START = 96;
+    const reportData = rawHex.substring(BODY_START + 520 * 2, BODY_START + (520 + 64) * 2);
+    // First 32 bytes (64 hex chars) of report_data = ed25519 public key
+    this.cachedPubkey = reportData.substring(0, 64).toLowerCase();
+    console.log(`[SecretVM] TEE pubkey extracted from REPORTDATA`);
     return this.cachedPubkey;
   }
 
   async getAttestationQuote(): Promise<string> {
     if (this.cachedQuote) return this.cachedQuote;
 
-    console.log(`[SecretVM] Reading attestation quote from ${this.quotePath}...`);
-    this.cachedQuote = fs.readFileSync(this.quotePath, 'utf-8').trim();
+    // Try reading from mounted quote file first
+    try {
+      if (fs.existsSync(this.quotePath)) {
+        console.log(`[SecretVM] Reading attestation quote from ${this.quotePath}...`);
+        this.cachedQuote = fs.readFileSync(this.quotePath, 'utf-8').trim();
+        return this.cachedQuote;
+      }
+    } catch (err: any) {
+      console.warn(`[SecretVM] Could not read quote file: ${err.message}`);
+    }
+
+    // Convert raw hex quote to base64
+    console.log('[SecretVM] Converting raw quote hex to base64...');
+    const rawHex = await this.getRawQuoteHex();
+    this.cachedQuote = Buffer.from(rawHex, 'hex').toString('base64');
+    console.log(`[SecretVM] Quote converted (${this.cachedQuote.length} chars base64)`);
     return this.cachedQuote;
   }
 
