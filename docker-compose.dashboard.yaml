@@ -1,6 +1,6 @@
 services:
   dashboard:
-    image: ghcr.io/mrgarbonzo/proofofflip/dashboard:ee8cf13f3c46bbf843fc560c5434a6895e8c0e7d
+    image: ghcr.io/mrgarbonzo/proofofflip/dashboard:ff8e40963eddb44df953547c7c32e310f477fb4e
     ports:
       - "3000:3000"
     environment:
