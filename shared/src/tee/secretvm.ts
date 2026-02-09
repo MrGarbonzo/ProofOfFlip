@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as https from 'https';
 import { TEEProvider } from './index';
 import {
   SECRETVM_ATTEST_URL,
@@ -7,9 +8,12 @@ import {
   SECRETVM_QUOTE_PATH,
 } from '../constants';
 
+// Allow self-signed certs on the attest server
+const insecureAgent = new https.Agent({ rejectUnauthorized: false });
+
 /**
  * SecretVMTEEProvider uses the real SecretVM infrastructure:
- * - Attestation server at :29343/self for RTMR3
+ * - Attestation server at :29343 (HTTPS, self-signed) for RTMR3 via /cpu.html
  * - TEE-generated ed25519 keypair mounted at /app/data/
  * - Signing server at 172.17.0.1:49153/sign (internal Docker network only)
  * - Attestation quote binding the pubkey to this TEE enclave
@@ -36,13 +40,64 @@ export class SecretVMTEEProvider implements TEEProvider {
   }
 
   async getRTMR3(): Promise<string> {
-    const attestation = await this.getSelfAttestation();
-    return attestation.rtmr3;
+    const url = `${this.attestUrl}/cpu.html`;
+    console.log(`[SecretVM] Fetching attestation from ${url}...`);
+
+    const res = await fetch(url, {
+      // @ts-ignore — Node fetch supports dispatcher/agent for TLS
+      dispatcher: insecureAgent,
+    });
+
+    if (!res.ok) {
+      // Try with Node https agent via manual request
+      const html = await this.fetchInsecure(url);
+      return this.parseRTMR3FromHtml(html);
+    }
+
+    const html = await res.text();
+    return this.parseRTMR3FromHtml(html);
+  }
+
+  private async fetchInsecure(url: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const req = https.get(url, { rejectUnauthorized: false }, (res) => {
+        let data = '';
+        res.on('data', (chunk: string) => { data += chunk; });
+        res.on('end', () => resolve(data));
+      });
+      req.on('error', reject);
+      req.setTimeout(10000, () => {
+        req.destroy();
+        reject(new Error('Attestation request timed out'));
+      });
+    });
+  }
+
+  private parseRTMR3FromHtml(html: string): string {
+    // Try label-based parsing first (e.g. "RTMR3: <hex>")
+    const labelMatch = html.match(/RTMR3[:\s]+([0-9a-fA-F]{64,96})/i);
+    if (labelMatch) {
+      console.log(`[SecretVM] RTMR3 parsed from label`);
+      return labelMatch[1].toLowerCase();
+    }
+
+    // Fallback: extract raw quote hex from <pre id="quoteTextarea"> and parse TDX offsets
+    const quoteMatch = html.match(/<pre[^>]*id="quoteTextarea"[^>]*>([\s\S]*?)<\/pre>/i);
+    if (quoteMatch) {
+      const rawHex = quoteMatch[1].replace(/\s/g, '');
+      // TDX quote structure: RTMR3 is at byte offset 472, 48 bytes
+      const rtmr3 = rawHex.substring(472 * 2, (472 + 48) * 2);
+      console.log(`[SecretVM] RTMR3 parsed from raw quote`);
+      return rtmr3.toLowerCase();
+    }
+
+    throw new Error(`Could not parse RTMR3 from attestation HTML (${html.length} chars)`);
   }
 
   async getTeePubkey(): Promise<string> {
     if (this.cachedPubkey) return this.cachedPubkey;
 
+    console.log(`[SecretVM] Reading TEE pubkey from ${this.pubkeyPath}...`);
     const pem = fs.readFileSync(this.pubkeyPath, 'utf-8');
     // Extract raw key bytes from PEM — strip header/footer and decode base64
     const b64 = pem
@@ -59,11 +114,13 @@ export class SecretVMTEEProvider implements TEEProvider {
   async getAttestationQuote(): Promise<string> {
     if (this.cachedQuote) return this.cachedQuote;
 
+    console.log(`[SecretVM] Reading attestation quote from ${this.quotePath}...`);
     this.cachedQuote = fs.readFileSync(this.quotePath, 'utf-8').trim();
     return this.cachedQuote;
   }
 
   async signWithTeeKey(payload: string): Promise<string> {
+    console.log(`[SecretVM] Signing with TEE key via ${this.signUrl}...`);
     const res = await fetch(this.signUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -82,14 +139,10 @@ export class SecretVMTEEProvider implements TEEProvider {
   }
 
   async getSelfAttestation(): Promise<{ rtmr3: string; report: string }> {
-    const res = await fetch(this.attestUrl);
-    if (!res.ok) {
-      throw new Error(`Attestation server error: ${res.status}`);
-    }
-    const data = (await res.json()) as { rtmr3?: string; RTMR3?: string };
+    const rtmr3 = await this.getRTMR3();
     return {
-      rtmr3: data.rtmr3 || data.RTMR3 || '',
-      report: JSON.stringify(data),
+      rtmr3,
+      report: JSON.stringify({ rtmr3, source: 'secretvm-cpu-html' }),
     };
   }
 
