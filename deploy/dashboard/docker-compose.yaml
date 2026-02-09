@@ -1,0 +1,16 @@
+services:
+  dashboard:
+    image: ghcr.io/mrgarbonzo/proofofflip/dashboard:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - DASHBOARD_PORT=3000
+      - TEE_PROVIDER=secretvm
+      - STORAGE_PATH=/data
+      - SOLANA_RPC_URL=${SOLANA_RPC_URL}
+    volumes:
+      - dashboard-data:/data
+    restart: unless-stopped
+
+volumes:
+  dashboard-data:

@@ -1,0 +1,17 @@
+services:
+  agent:
+    image: ghcr.io/mrgarbonzo/proofofflip/agent:latest
+    ports:
+      - "${AGENT_PORT:-3001}:${AGENT_PORT:-3001}"
+    environment:
+      - AGENT_NAME=${AGENT_NAME}
+      - AGENT_PORT=${AGENT_PORT:-3001}
+      - AGENT_ENDPOINT=${AGENT_ENDPOINT}
+      - TEE_PROVIDER=secretvm
+      - STORAGE_PATH=/secretvm/data
+    volumes:
+      - agent-data:/secretvm/data
+    restart: unless-stopped
+
+volumes:
+  agent-data:
