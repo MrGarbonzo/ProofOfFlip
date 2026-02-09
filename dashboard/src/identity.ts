@@ -56,7 +56,13 @@ export class DashboardIdentity {
       console.log(`[Dashboard] Identity loaded. RTMR3: ${this.birthCert.rtmr3}`);
     } else {
       console.log('[Dashboard] First boot — generating TEE identity...');
-      await this.firstBoot();
+      try {
+        await this.firstBoot();
+      } catch (err: any) {
+        console.error('[Dashboard] TEE boot FAILED:', err.message);
+        console.error(err.stack);
+        throw err;
+      }
       console.log(`[Dashboard] RTMR3: ${this.birthCert.rtmr3}`);
       console.log(`[Dashboard] TEE Pubkey: ${this.birthCert.teePubkey}`);
     }

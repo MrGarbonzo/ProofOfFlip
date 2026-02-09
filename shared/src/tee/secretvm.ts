@@ -43,18 +43,8 @@ export class SecretVMTEEProvider implements TEEProvider {
     const url = `${this.attestUrl}/cpu.html`;
     console.log(`[SecretVM] Fetching attestation from ${url}...`);
 
-    const res = await fetch(url, {
-      // @ts-ignore — Node fetch supports dispatcher/agent for TLS
-      dispatcher: insecureAgent,
-    });
-
-    if (!res.ok) {
-      // Try with Node https agent via manual request
-      const html = await this.fetchInsecure(url);
-      return this.parseRTMR3FromHtml(html);
-    }
-
-    const html = await res.text();
+    // Use Node https module directly — native fetch doesn't support self-signed certs
+    const html = await this.fetchInsecure(url);
     return this.parseRTMR3FromHtml(html);
   }
 
