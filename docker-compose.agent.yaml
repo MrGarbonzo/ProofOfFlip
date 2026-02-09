@@ -2,7 +2,7 @@ services:
   agent:
     image: ghcr.io/mrgarbonzo/proofofflip/agent:ecef11b0c42af85dcaabbe02016df31d083b8969
     ports:
-      - "${AGENT_PORT}:${AGENT_PORT}"
+      - "80:${AGENT_PORT}"
     environment:
       - AGENT_NAME=${AGENT_NAME}
       - AGENT_PORT=${AGENT_PORT}
@@ -12,8 +12,6 @@ services:
       - STORAGE_PATH=/secretvm/data
     volumes:
       - agent-data:/secretvm/data
-      - /app/data/pubkey.pem:/app/data/pubkey.pem:ro
-      - /app/data/quote.txt:/app/data/quote.txt:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
