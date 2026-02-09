@@ -69,7 +69,13 @@ export class FlipBotAgent {
       console.log(`[${this.name}] Wallet: ${this.walletAddress}`);
     } else {
       console.log(`[${this.name}] First boot — generating identity...`);
-      await this.firstBoot();
+      try {
+        await this.firstBoot();
+      } catch (err: any) {
+        console.error(`[${this.name}] Boot FAILED:`, err.message);
+        console.error(err.stack);
+        throw err;
+      }
       console.log(`[${this.name}] Wallet: ${this.walletAddress}`);
       console.log(`[${this.name}] RTMR3: ${this.birthCert.rtmr3}`);
       console.log(`[${this.name}] TEE Pubkey: ${this.birthCert.teePubkey}`);
@@ -79,11 +85,21 @@ export class FlipBotAgent {
   private async firstBoot(): Promise<void> {
     // Generate Solana wallet (for USDC transfers)
     this.keypair = Keypair.generate();
+    console.log(`[${this.name}] Wallet generated: ${this.walletAddress}`);
 
     // Get TEE attestation data
+    console.log(`[${this.name}] Fetching RTMR3...`);
     const rtmr3 = await this.tee.getRTMR3();
+    console.log(`[${this.name}] RTMR3: ${rtmr3}`);
+
+    console.log(`[${this.name}] Reading TEE pubkey...`);
     const teePubkey = await this.tee.getTeePubkey();
+    console.log(`[${this.name}] TEE pubkey: ${teePubkey.substring(0, 16)}...`);
+
+    console.log(`[${this.name}] Reading attestation quote...`);
     const attestationQuote = await this.tee.getAttestationQuote();
+    console.log(`[${this.name}] Quote loaded (${attestationQuote.length} chars)`);
+
     const codeHash = this.computeCodeHash();
     const timestamp = Date.now();
 
@@ -106,7 +122,9 @@ export class FlipBotAgent {
     const message = birthCertMessage(partialCert);
 
     // Sign with TEE key (proves this cert was created inside this TEE enclave)
+    console.log(`[${this.name}] Signing birth cert with TEE key...`);
     const teeSignature = await this.tee.signWithTeeKey(message);
+    console.log(`[${this.name}] TEE signature obtained`);
 
     // Sign with Solana wallet key (links the wallet to this TEE identity)
     const walletSignature = signMessage(message, this.keypair.secretKey);

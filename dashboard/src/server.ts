@@ -7,6 +7,7 @@ import { getWalletAddress, getUSDCBalance } from './wallet';
 
 export function createDashboardServer(): express.Express {
   const app = express();
+  app.set('trust proxy', true);
   app.use(express.json());
 
   // Serve static files
@@ -15,7 +16,7 @@ export function createDashboardServer(): express.Express {
   // POST /api/register — Agent registration
   app.post('/api/register', async (req, res) => {
     try {
-      const result = await registerAgent(req.body);
+      const result = await registerAgent(req.body, req.ip);
       if (result.success) {
         res.json(result);
       } else {

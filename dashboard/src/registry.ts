@@ -18,13 +18,22 @@ export function addToAllowlist(rtmr3: string): void {
   rtmr3Allowlist.add(rtmr3);
 }
 
-export async function registerAgent(payload: RegistrationPayload): Promise<{
+export async function registerAgent(payload: RegistrationPayload, requestIp?: string): Promise<{
   success: boolean;
   message: string;
   agent?: AgentInfo;
   verification?: VerificationResult;
 }> {
-  const { birthCert, endpoint, signature } = payload;
+  const { birthCert, signature } = payload;
+
+  // Auto-detect endpoint from request IP if agent didn't provide one
+  let endpoint = payload.endpoint;
+  if (!endpoint || endpoint.includes('localhost')) {
+    const ip = requestIp?.replace('::ffff:', '') || '127.0.0.1';
+    const port = payload.endpoint?.match(/:(\d+)/)?.[1] || '3001';
+    endpoint = `http://${ip}:${port}`;
+    console.log(`[Registry] Auto-detected endpoint for ${birthCert.agentName}: ${endpoint}`);
+  }
 
   // ─── Step 1: Verify TEE attestation chain ───
   // This is the core proof of autonomy:

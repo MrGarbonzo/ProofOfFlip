@@ -8,6 +8,7 @@ async function main() {
   const port = parseInt(process.env.AGENT_PORT || '3001', 10);
   const dashboardUrl = DASHBOARD_URL;
   const agentEndpoint = process.env.AGENT_ENDPOINT || `http://localhost:${port}`;
+  // If no explicit endpoint, dashboard will auto-detect from request IP
 
   console.log(`=== FlipBot Agent: ${agentName} ===`);
   console.log(`TEE Provider: ${process.env.TEE_PROVIDER || 'mock'}`);

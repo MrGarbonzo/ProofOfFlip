@@ -6,11 +6,16 @@ services:
     environment:
       - AGENT_NAME=${AGENT_NAME}
       - AGENT_PORT=${AGENT_PORT}
-      - AGENT_ENDPOINT=${AGENT_ENDPOINT}
+      - DASHBOARD_URL=${DASHBOARD_URL}
+      - SOLANA_RPC_URL=${SOLANA_RPC_URL}
       - TEE_PROVIDER=secretvm
       - STORAGE_PATH=/secretvm/data
     volumes:
       - agent-data:/secretvm/data
+      - /app/data/pubkey.pem:/app/data/pubkey.pem:ro
+      - /app/data/quote.txt:/app/data/quote.txt:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
 
 volumes:

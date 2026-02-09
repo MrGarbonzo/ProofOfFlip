@@ -15,7 +15,7 @@ export const MIN_BALANCE_TO_PLAY = GAME_STAKE;
 
 export const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
 
-export const SECRETVM_ATTEST_URL = 'http://localhost:29343/self';
+export const SECRETVM_ATTEST_URL = process.env.SECRETVM_ATTEST_URL || 'http://172.17.0.1:29343/self';
 
 // SecretVM Verifiable Message Signing
 export const SECRETVM_SIGN_URL = 'http://172.17.0.1:49153/sign';
