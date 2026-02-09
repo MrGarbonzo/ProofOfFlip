@@ -4,8 +4,9 @@ import { registerAgent } from './registry';
 import { battlePool, leaderboard } from './state';
 import { sseHandler, clientCount } from './sse';
 import { getWalletAddress, getUSDCBalance } from './wallet';
+import { DashboardIdentity } from './identity';
 
-export function createDashboardServer(): express.Express {
+export function createDashboardServer(identity: DashboardIdentity): express.Express {
   const app = express();
   app.set('trust proxy', true);
   app.use(express.json());
@@ -82,6 +83,24 @@ export function createDashboardServer(): express.Express {
       dashboardWallet: getWalletAddress(),
       dashboardBalance: balance,
     });
+  });
+
+  // GET /api/attestation — Dashboard TEE attestation report
+  app.get('/api/attestation', async (_req, res) => {
+    const cert = identity.getBirthCert();
+    res.json({
+      rtmr3: cert.rtmr3,
+      codeHash: cert.codeHash,
+      timestamp: cert.timestamp,
+      provider: process.env.TEE_PROVIDER || 'mock',
+      quote: cert.attestationQuote,
+      teePubkey: cert.teePubkey,
+    });
+  });
+
+  // GET /api/birth-cert — Dashboard birth certificate
+  app.get('/api/birth-cert', (_req, res) => {
+    res.json(identity.getBirthCert());
   });
 
   // GET /api/events — SSE stream

@@ -312,10 +312,64 @@
       z-index: 200;
     }
 
+    .attestation-banner {
+      margin: 12px 40px 0;
+      padding: 14px 20px;
+      background: linear-gradient(90deg, #0a1a0a, #12121a);
+      border: 1px solid #2a3a2a;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+
+    .attestation-banner:hover {
+      border-color: #4caf50;
+    }
+
+    .attestation-banner .att-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+
+    .attestation-banner .att-label {
+      color: #4caf50;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      font-weight: bold;
+    }
+
+    .attestation-banner .att-provider {
+      color: #888;
+      font-size: 11px;
+    }
+
+    .attestation-banner .att-details {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px 20px;
+      font-size: 12px;
+    }
+
+    .attestation-banner .att-key {
+      color: #666;
+    }
+
+    .attestation-banner .att-val {
+      color: #aaa;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
     @media (max-width: 800px) {
       .container { grid-template-columns: 1fr; padding: 10px; }
       .header { padding: 15px 20px; flex-direction: column; gap: 10px; }
       .fund-banner { margin: 16px 10px 0; flex-direction: column; gap: 8px; text-align: center; }
+      .attestation-banner { margin: 12px 10px 0; }
+      .attestation-banner .att-details { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -349,6 +403,19 @@
     <div class="fund-balance" id="fund-balance">$0.00</div>
   </div>
   <div class="copied-toast" id="copied-toast">Wallet address copied!</div>
+
+  <div class="attestation-banner" onclick="showDashboardAttestation()" title="Click to view full dashboard birth certificate">
+    <div class="att-header">
+      <span class="att-label">Dashboard TEE Attestation</span>
+      <span class="att-provider" id="att-provider">Loading...</span>
+    </div>
+    <div class="att-details">
+      <span class="att-key">RTMR3</span>
+      <span class="att-val" id="att-rtmr3">---</span>
+      <span class="att-key">TEE Pubkey</span>
+      <span class="att-val" id="att-teepubkey">---</span>
+    </div>
+  </div>
 
   <div class="container">
     <div class="panel">
@@ -576,10 +643,45 @@
       };
     }
 
+    // Dashboard attestation
+    let dashboardCert = null;
+
+    async function fetchDashboardAttestation() {
+      try {
+        const res = await fetch('/api/birth-cert');
+        dashboardCert = await res.json();
+        document.getElementById('att-rtmr3').textContent = dashboardCert.rtmr3;
+        document.getElementById('att-teepubkey').textContent = dashboardCert.teePubkey;
+
+        const attRes = await fetch('/api/attestation');
+        const att = await attRes.json();
+        document.getElementById('att-provider').textContent = att.provider;
+      } catch (e) { console.error('Fetch dashboard attestation error:', e); }
+    }
+
+    function showDashboardAttestation() {
+      if (!dashboardCert) return;
+      document.getElementById('modal-name').textContent = 'Dashboard';
+      document.getElementById('modal-status').textContent = 'running';
+      document.getElementById('modal-balance').textContent = document.getElementById('fund-balance').textContent;
+      document.getElementById('modal-record').textContent = 'N/A (coordinator)';
+      document.getElementById('modal-image').textContent = dashboardCert.dockerImage || 'N/A';
+      document.getElementById('modal-wallet').textContent = dashboardCert.walletAddress;
+      document.getElementById('modal-codehash').textContent = dashboardCert.codeHash || 'N/A';
+      document.getElementById('modal-born').textContent = dashboardCert.timestamp ? new Date(dashboardCert.timestamp).toLocaleString() : 'N/A';
+      document.getElementById('modal-rtmr3').textContent = dashboardCert.rtmr3 || 'N/A';
+      document.getElementById('modal-teepubkey').textContent = dashboardCert.teePubkey || 'N/A';
+      document.getElementById('modal-teesig').textContent = dashboardCert.teeSignature || 'N/A';
+      document.getElementById('modal-walletsig').textContent = dashboardCert.walletSignature || 'N/A';
+      document.getElementById('modal-quote').textContent = dashboardCert.attestationQuote || 'N/A';
+      document.getElementById('modal-overlay').classList.add('active');
+    }
+
     // Init
     fetchLeaderboard();
     fetchStats();
     fetchRecentGames();
+    fetchDashboardAttestation();
     connectSSE();
 
     // Poll leaderboard every 30s as backup
