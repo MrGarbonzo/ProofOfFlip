@@ -54,3 +54,28 @@ jobs:
             ghcr.io/mrgarbonzo/proofofflip/dashboard:latest
             ghcr.io/mrgarbonzo/proofofflip/dashboard:${{ github.sha }}
 
+  update-compose:
+    runs-on: ubuntu-latest
+    needs: [build-agent, build-dashboard]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update image tags in deploy compose files
+        run: |
+          sed -i "s|ghcr.io/mrgarbonzo/proofofflip/agent:[a-f0-9]\{40\}|ghcr.io/mrgarbonzo/proofofflip/agent:${{ github.sha }}|g" docker-compose.agent.yaml
+          sed -i "s|ghcr.io/mrgarbonzo/proofofflip/dashboard:[a-f0-9]\{40\}|ghcr.io/mrgarbonzo/proofofflip/dashboard:${{ github.sha }}|g" docker-compose.dashboard.yaml
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docker-compose.agent.yaml docker-compose.dashboard.yaml
+          git diff --cached --quiet && echo "No changes" && exit 0
+          git commit -m "ci: update image tags to ${{ github.sha }} [skip ci]"
+          git push
+
