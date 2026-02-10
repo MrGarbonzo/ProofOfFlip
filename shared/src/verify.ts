@@ -84,12 +84,17 @@ export async function verifyBirthCertAttestation(
     return verifyMockBirthCert(birthCert, expectedRTMR3s);
   }
 
-  // Production: parse quote via PCCS
+  // Production: parse quote via PCCS, fall back to local TDX parsing
   let parsedQuote: ParsedQuote;
   try {
     parsedQuote = await parseAttestationQuote(birthCert.attestationQuote);
   } catch (err: any) {
-    return { verified: false, reason: `Quote parse failed: ${err.message}` };
+    console.log(`[Verify] PCCS parse failed (${err.message}), trying local TDX parse...`);
+    try {
+      parsedQuote = parseTdxQuoteLocally(birthCert.attestationQuote);
+    } catch (localErr: any) {
+      return { verified: false, reason: `Quote parse failed: PCCS: ${err.message}, local: ${localErr.message}` };
+    }
   }
 
   // Extract pubkey from hardware-signed report_data
@@ -159,6 +164,35 @@ function verifyMockBirthCert(
     rtmr3: birthCert.rtmr3,
     teePubkey: birthCert.teePubkey,
     platform: 'mock',
+  };
+}
+
+/**
+ * Parse a TDX quote locally using known byte offsets.
+ * TDX Quote v4 layout: 48-byte header, then report body with fields at fixed offsets.
+ */
+function parseTdxQuoteLocally(quoteB64: string): ParsedQuote {
+  // Decode base64 to hex
+  const rawHex = Buffer.from(quoteB64, 'base64').toString('hex');
+  const BODY_START = 96; // 48 bytes = 96 hex chars
+
+  function extract(bodyOffset: number, size: number): string {
+    const start = BODY_START + bodyOffset * 2;
+    const end = start + size * 2;
+    if (end <= rawHex.length) {
+      return rawHex.substring(start, end);
+    }
+    return '';
+  }
+
+  return {
+    report_data: extract(520, 64),
+    rtmr0: extract(328, 48),
+    rtmr1: extract(376, 48),
+    rtmr2: extract(424, 48),
+    rtmr3: extract(472, 48),
+    mr_td: extract(136, 48),
+    tcb_svn: extract(0, 16),
   };
 }
 
