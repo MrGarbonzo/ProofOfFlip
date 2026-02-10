@@ -27,4 +27,4 @@ export const PCCS_QUOTE_PARSE_URL = 'https://pccs.scrtlabs.com/dcap-tools/quote-
 
 // Dashboard — the single well-known endpoint every agent connects to.
 // Baked into the image. Override with DASHBOARD_URL env var for local dev only.
-export const DASHBOARD_URL = process.env.DASHBOARD_URL || 'https://mrgarbonzo.com';
+export const DASHBOARD_URL = process.env.DASHBOARD_URL || 'https://flip.mrgarbonzo.com';

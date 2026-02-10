@@ -26,13 +26,15 @@ export async function registerAgent(payload: RegistrationPayload, requestIp?: st
 }> {
   const { birthCert, signature } = payload;
 
-  // Auto-detect endpoint from request IP if agent didn't provide one
-  let endpoint = payload.endpoint;
-  if (!endpoint || endpoint.includes('localhost')) {
+  // Auto-detect callback URL from request IP if agent sent localhost.
+  // The agent signs `register:<wallet>:<endpoint>` with its own endpoint value,
+  // so we must verify the signature against payload.endpoint (what was signed),
+  // then store the auto-detected callback URL for game commands.
+  let callbackUrl = payload.endpoint;
+  if (!callbackUrl || callbackUrl.includes('localhost')) {
     const ip = requestIp?.replace('::ffff:', '') || '127.0.0.1';
-    const port = payload.endpoint?.match(/:(\d+)/)?.[1] || '3001';
-    endpoint = `http://${ip}:${port}`;
-    console.log(`[Registry] Auto-detected endpoint for ${birthCert.agentName}: ${endpoint}`);
+    callbackUrl = `http://${ip}`;  // port 80 — SecretVM exposes 80:3001
+    console.log(`[Registry] Auto-detected callback for ${birthCert.agentName}: ${callbackUrl}`);
   }
 
   // ─── Step 1: Verify TEE attestation chain ───
@@ -69,8 +71,9 @@ export async function registerAgent(payload: RegistrationPayload, requestIp?: st
   }
 
   // ─── Step 3: Verify registration signature ───
-  // Proves the entity registering actually controls the wallet
-  const regMessage = `register:${birthCert.walletAddress}:${endpoint}`;
+  // Proves the entity registering actually controls the wallet.
+  // Verify against payload.endpoint — the value the agent actually signed.
+  const regMessage = `register:${birthCert.walletAddress}:${payload.endpoint}`;
   if (!verifySignature(regMessage, signature, pubKeyBytes)) {
     return { success: false, message: 'Registration signature invalid' };
   }
@@ -98,7 +101,7 @@ export async function registerAgent(payload: RegistrationPayload, requestIp?: st
   const agent: AgentInfo = {
     agentName: birthCert.agentName,
     walletAddress: birthCert.walletAddress,
-    endpoint,
+    endpoint: callbackUrl,
     birthCert,
     balance: funded ? 1.0 : 1.0,
     wins: 0,

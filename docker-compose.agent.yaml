@@ -2,11 +2,9 @@ services:
   agent:
     image: ghcr.io/mrgarbonzo/proofofflip/agent:321c8fff53189aab4891e1b09548538e356e8c6f
     ports:
-      - "80:${AGENT_PORT}"
+      - "80:3001"
     environment:
-      - AGENT_NAME=${AGENT_NAME}
-      - AGENT_PORT=${AGENT_PORT}
-      - DASHBOARD_URL=${DASHBOARD_URL}
+      - AGENT_NAME=${AGENT_NAME:-flipbot}
       - SOLANA_RPC_URL=${SOLANA_RPC_URL}
       - TEE_PROVIDER=secretvm
       - STORAGE_PATH=/secretvm/data
