@@ -10,6 +10,8 @@ services:
       - SOLANA_RPC_URL=${SOLANA_RPC_URL}
     volumes:
       - dashboard-data:/data
+      - ./crypto/docker_public_key_ed25519.pem:/app/data/pubkey.pem:ro
+      - ./crypto/docker_attestation_ed25519.txt:/app/data/quote.txt:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
