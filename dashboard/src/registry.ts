@@ -10,6 +10,7 @@ import {
 import { battlePool, fundedWallets } from './state';
 import { fundAgent } from './funding';
 import { broadcast } from './sse';
+import { FUNDING_AMOUNT } from '@proof-of-flip/shared';
 
 // Allowlist of known RTMR3 values (populated at startup or from env)
 const rtmr3Allowlist: Set<string> = new Set();
@@ -97,13 +98,12 @@ export async function registerAgent(payload: RegistrationPayload, requestIp?: st
   }
 
   // Create agent info and add to pool
-  // If funding fails (local dev, no USDC), grant a mock starting balance so games can run
   const agent: AgentInfo = {
     agentName: birthCert.agentName,
     walletAddress: birthCert.walletAddress,
     endpoint: callbackUrl,
     birthCert,
-    balance: funded ? 1.0 : 0,
+    balance: funded ? FUNDING_AMOUNT : 0,
     wins: 0,
     losses: 0,
     status: 'active',
