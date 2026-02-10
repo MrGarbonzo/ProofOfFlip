@@ -4,7 +4,7 @@ import {
   createTransferInstruction,
   getOrCreateAssociatedTokenAccount,
 } from '@solana/spl-token';
-import { USDC_MINT, GAME_STAKE_LAMPORTS, SOLANA_RPC_URL } from '@proof-of-flip/shared';
+import { USDC_MINT, GAME_STAKE_LAMPORTS, SOLANA_RPC_URL, DASHBOARD_URL } from '@proof-of-flip/shared';
 
 export class GameService {
   private keypair: Keypair;
@@ -28,8 +28,31 @@ export class GameService {
       return await this.payViaX402(opponentEndpoint);
     } catch (err) {
       console.warn('x402 payment failed, falling back to direct transfer:', err);
-      return await this.directTransfer(opponentWallet);
+      try {
+        return await this.directTransfer(opponentWallet);
+      } catch (transferErr) {
+        console.warn('Direct transfer also failed, requesting SOL top-up:', transferErr);
+        await this.requestSolTopup();
+        return await this.directTransfer(opponentWallet);
+      }
     }
+  }
+
+  private async requestSolTopup(): Promise<void> {
+    const walletAddress = this.keypair.publicKey.toBase58();
+    console.log(`[GameService] Requesting SOL top-up from dashboard for ${walletAddress}`);
+    const res = await fetch(`${DASHBOARD_URL}/api/topup-sol`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ walletAddress }),
+    });
+    const data = await res.json() as { success: boolean; txSignature?: string; message?: string };
+    if (!data.success) {
+      throw new Error(`SOL top-up failed: ${data.message}`);
+    }
+    console.log(`[GameService] SOL top-up received: ${data.txSignature}`);
+    // Wait for confirmation to propagate
+    await new Promise(r => setTimeout(r, 2000));
   }
 
   private async payViaX402(opponentEndpoint: string): Promise<string> {

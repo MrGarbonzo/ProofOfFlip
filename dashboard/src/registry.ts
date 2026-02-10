@@ -91,8 +91,8 @@ export async function registerAgent(payload: RegistrationPayload, requestIp?: st
       fundedWallets.add(birthCert.walletAddress);
       funded = true;
     } catch (err: any) {
-      console.warn(`[Registry] Failed to fund agent ${birthCert.agentName}: ${err.message}`);
-      console.log(`[Registry] Granting ${birthCert.agentName} mock balance for local dev`);
+      console.warn(`[Registry] USDC funding failed for ${birthCert.agentName}: ${err.message}`);
+      console.warn(`[Registry] Agent will have 0 balance — fund the dashboard wallet to enable real games`);
     }
   }
 
@@ -103,7 +103,7 @@ export async function registerAgent(payload: RegistrationPayload, requestIp?: st
     walletAddress: birthCert.walletAddress,
     endpoint: callbackUrl,
     birthCert,
-    balance: funded ? 1.0 : 1.0,
+    balance: funded ? 1.0 : 0,
     wins: 0,
     losses: 0,
     status: 'active',

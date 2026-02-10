@@ -3,7 +3,9 @@ import path from 'path';
 import { registerAgent } from './registry';
 import { battlePool, leaderboard } from './state';
 import { sseHandler, clientCount } from './sse';
-import { getWalletAddress, getUSDCBalance } from './wallet';
+import { getWalletAddress, getUSDCBalance, getSOLBalanceOf } from './wallet';
+import { fundAgentSol } from './funding';
+import { SOL_TOPUP_THRESHOLD_LAMPORTS } from '@proof-of-flip/shared';
 import { DashboardIdentity } from './identity';
 
 export function createDashboardServer(identity: DashboardIdentity): express.Express {
@@ -101,6 +103,40 @@ export function createDashboardServer(identity: DashboardIdentity): express.Expr
   // GET /api/birth-cert — Dashboard birth certificate
   app.get('/api/birth-cert', (_req, res) => {
     res.json(identity.getBirthCert());
+  });
+
+  // POST /api/topup-sol — Agent requests SOL (gas) top-up
+  app.post('/api/topup-sol', async (req, res) => {
+    try {
+      const { walletAddress } = req.body;
+      if (!walletAddress || typeof walletAddress !== 'string') {
+        res.status(400).json({ success: false, message: 'walletAddress is required' });
+        return;
+      }
+
+      // Agent must be registered and active
+      const agent = battlePool.get(walletAddress);
+      if (!agent || agent.status !== 'active') {
+        res.status(404).json({ success: false, message: 'Agent not found or not active' });
+        return;
+      }
+
+      // Check on-chain SOL balance
+      const solLamports = await getSOLBalanceOf(walletAddress);
+      if (solLamports >= SOL_TOPUP_THRESHOLD_LAMPORTS) {
+        res.status(400).json({
+          success: false,
+          message: `SOL balance (${solLamports} lamports) is above threshold`,
+        });
+        return;
+      }
+
+      // Send SOL
+      const txSignature = await fundAgentSol(walletAddress);
+      res.json({ success: true, txSignature });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
   });
 
   // GET /api/events — SSE stream

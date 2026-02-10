@@ -1,6 +1,6 @@
 import { createDashboardServer } from './server';
 import { startCoordinator } from './coordinator';
-import { initWallet } from './wallet';
+import { initWallet, getSOLBalance, getUSDCBalance } from './wallet';
 import { DashboardIdentity } from './identity';
 
 async function main() {
@@ -10,8 +10,14 @@ async function main() {
 
   // 1. Initialize wallet (generate on first boot, load on restart)
   const wallet = await initWallet();
-  console.log(`[Dashboard] Fund this wallet to start games:`);
-  console.log(`[Dashboard]   ${wallet.publicKey.toBase58()}`);
+  const solBalance = await getSOLBalance();
+  const usdcBalance = await getUSDCBalance();
+  console.log(`[Dashboard] Wallet: ${wallet.publicKey.toBase58()}`);
+  console.log(`[Dashboard] SOL balance: ${solBalance}`);
+  console.log(`[Dashboard] USDC balance: ${usdcBalance}`);
+  if (solBalance < 0.01 || usdcBalance < 1) {
+    console.warn(`[Dashboard] ⚠ Wallet needs funding! Send SOL and USDC to the address above to enable agent funding.`);
+  }
 
   // 2. Initialize TEE identity (birth certificate, attestation)
   const identity = new DashboardIdentity();

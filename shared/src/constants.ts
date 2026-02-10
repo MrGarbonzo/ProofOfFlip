@@ -9,6 +9,9 @@ export const GAME_STAKE_LAMPORTS = GAME_STAKE * 10 ** USDC_DECIMALS; // 10000
 export const FUNDING_AMOUNT = 1.0;
 export const FUNDING_AMOUNT_LAMPORTS = FUNDING_AMOUNT * 10 ** USDC_DECIMALS; // 1000000
 
+export const SOL_FUNDING_LAMPORTS = 5_000_000; // 0.005 SOL — enough for ~1000 tx fees
+export const SOL_TOPUP_THRESHOLD_LAMPORTS = 1_000_000; // 0.001 SOL — request top-up below this
+
 export const MATCH_INTERVAL_MS = 60_000;
 
 export const MIN_BALANCE_TO_PLAY = GAME_STAKE;

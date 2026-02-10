@@ -59,6 +59,28 @@ export function getWalletAddress(): string {
   return getWallet().publicKey.toBase58();
 }
 
+/** Check the dashboard's SOL balance */
+export async function getSOLBalance(): Promise<number> {
+  try {
+    const conn = getConnection();
+    const lamports = await conn.getBalance(getWallet().publicKey);
+    return lamports / 1e9;
+  } catch {
+    return 0;
+  }
+}
+
+/** Check SOL balance for any address */
+export async function getSOLBalanceOf(address: string): Promise<number> {
+  try {
+    const conn = getConnection();
+    const lamports = await conn.getBalance(new PublicKey(address));
+    return lamports;
+  } catch {
+    return 0;
+  }
+}
+
 /** Check the dashboard's USDC balance */
 export async function getUSDCBalance(): Promise<number> {
   try {

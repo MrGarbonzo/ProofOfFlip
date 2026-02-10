@@ -2,7 +2,7 @@ services:
   dashboard:
     image: ghcr.io/mrgarbonzo/proofofflip/dashboard:5224edc5bae71df917338472c625199ba3dd0c9c
     ports:
-      - "80:3000"
+      - "3000:3000"
     environment:
       - DASHBOARD_PORT=3000
       - TEE_PROVIDER=secretvm
