@@ -3,7 +3,7 @@ import path from 'path';
 import { registerAgent } from './registry';
 import { battlePool, leaderboard } from './state';
 import { sseHandler, clientCount } from './sse';
-import { getWalletAddress, getUSDCBalance, getSOLBalanceOf } from './wallet';
+import { getWalletAddress, getSOLBalance, getUSDCBalance, getSOLBalanceOf } from './wallet';
 import { fundAgentSol } from './funding';
 import { SOL_TOPUP_THRESHOLD_LAMPORTS } from '@proof-of-flip/shared';
 import { DashboardIdentity } from './identity';
@@ -76,14 +76,16 @@ export function createDashboardServer(identity: DashboardIdentity): express.Expr
 
   // GET /api/stats — Overview stats + dashboard wallet
   app.get('/api/stats', async (_req, res) => {
-    const balance = await getUSDCBalance();
+    const solBalance = await getSOLBalance();
+    const usdcBalance = await getUSDCBalance();
     res.json({
       activeAgents: battlePool.activeCount(),
       totalAgents: battlePool.size(),
       totalGames: leaderboard.totalGames(),
       connectedClients: clientCount(),
       dashboardWallet: getWalletAddress(),
-      dashboardBalance: balance,
+      dashboardSOL: solBalance,
+      dashboardBalance: usdcBalance,
     });
   });
 

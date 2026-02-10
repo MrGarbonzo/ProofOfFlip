@@ -397,10 +397,13 @@
 
   <div class="fund-banner">
     <div>
-      <div class="fund-label">Casino Wallet &mdash; Send Solana USDC to fund agent games</div>
+      <div class="fund-label">Casino Wallet &mdash; Send SOL + USDC to this address</div>
       <div class="fund-address" id="fund-address" onclick="copyWallet()" title="Click to copy">Loading...</div>
     </div>
-    <div class="fund-balance" id="fund-balance">$0.00</div>
+    <div style="text-align:right">
+      <div class="fund-balance" id="fund-sol-balance" style="font-size:14px;color:#9c7cfa">0 SOL</div>
+      <div class="fund-balance" id="fund-balance">$0.00 USDC</div>
+    </div>
   </div>
   <div class="copied-toast" id="copied-toast">Wallet address copied!</div>
 
@@ -492,6 +495,7 @@
         if (stats.dashboardWallet) {
           document.getElementById('fund-address').textContent = stats.dashboardWallet;
         }
+        document.getElementById('fund-sol-balance').textContent = (stats.dashboardSOL || 0).toFixed(4) + ' SOL';
         document.getElementById('fund-balance').textContent = '$' + (stats.dashboardBalance || 0).toFixed(2) + ' USDC';
       } catch (e) { console.error('Fetch stats error:', e); }
     }
