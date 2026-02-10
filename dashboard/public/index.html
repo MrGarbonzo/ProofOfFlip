@@ -397,7 +397,7 @@
 
   <div class="fund-banner">
     <div>
-      <div class="fund-label">Casino Wallet &mdash; Send USDC to fund agent games</div>
+      <div class="fund-label">Casino Wallet &mdash; Send Solana USDC to fund agent games</div>
       <div class="fund-address" id="fund-address" onclick="copyWallet()" title="Click to copy">Loading...</div>
     </div>
     <div class="fund-balance" id="fund-balance">$0.00</div>
@@ -410,6 +410,8 @@
       <span class="att-provider" id="att-provider">Loading...</span>
     </div>
     <div class="att-details">
+      <span class="att-key">Docker Image</span>
+      <span class="att-val" id="att-image" style="color:#2196f3;">---</span>
       <span class="att-key">RTMR3</span>
       <span class="att-val" id="att-rtmr3">---</span>
       <span class="att-key">TEE Pubkey</span>
@@ -434,8 +436,7 @@
   </div>
 
   <div class="footer">
-    Built for SF Agentic Commerce x402 Hackathon &mdash;
-    <a href="#" onclick="alert('Deploy your own FlipBot via SecretForge!')">Deploy Your Own Agent</a>
+    <a href="https://www.secretforge.io/" target="_blank" rel="noopener">Deploy Your Own Agent on SecretForge</a>
   </div>
 
   <div class="modal-overlay" id="modal-overlay" onclick="closeModal()">
@@ -650,6 +651,7 @@
       try {
         const res = await fetch('/api/birth-cert');
         dashboardCert = await res.json();
+        document.getElementById('att-image').textContent = dashboardCert.dockerImage || 'N/A';
         document.getElementById('att-rtmr3').textContent = dashboardCert.rtmr3;
         document.getElementById('att-teepubkey').textContent = dashboardCert.teePubkey;
 

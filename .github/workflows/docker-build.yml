@@ -53,6 +53,8 @@ jobs:
           tags: |
             ghcr.io/mrgarbonzo/proofofflip/dashboard:latest
             ghcr.io/mrgarbonzo/proofofflip/dashboard:${{ github.sha }}
+          build-args: |
+            DOCKER_IMAGE=ghcr.io/mrgarbonzo/proofofflip/dashboard:${{ github.sha }}
 
   update-compose:
     runs-on: ubuntu-latest

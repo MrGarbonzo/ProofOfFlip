@@ -25,6 +25,9 @@ RUN npm run build -w shared && npm run build -w dashboard
 
 WORKDIR /app/dashboard
 
+ARG DOCKER_IMAGE=local-dev
+ENV DOCKER_IMAGE=$DOCKER_IMAGE
+
 EXPOSE 3000
 
 CMD ["node", "dist/index.js"]
