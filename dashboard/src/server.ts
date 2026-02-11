@@ -219,7 +219,7 @@ export function createDashboardServer(identity: DashboardIdentity): express.Expr
       console.log(`[Deploy] Deploying agent "${agentName}" via secretvm-cli (type: ${vmType}, image: ${image})...`);
 
       const { stdout, stderr } = await execAsync(
-        `secretvm-cli vm create --name ${agentName} --type ${vmType} --docker-compose ${tmpFile} --persistence --tls -k "${apiKey}"`,
+        `secretvm-cli vm create --name ${agentName} --type ${vmType} --docker-compose ${tmpFile} --persistence -k "${apiKey}"`,
         { timeout: 120_000 }
       );
 
