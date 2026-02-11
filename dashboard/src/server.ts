@@ -152,8 +152,15 @@ export function createDashboardServer(identity: DashboardIdentity): express.Expr
   });
 
   // POST /api/deploy-agent — Deploy a new agent via SecretVM CLI
+  //
+  // IMPORTANT: The docker-compose template must be IDENTICAL for all agents.
+  // SecretVM measures the compose config into RTMR3 — any difference (even env
+  // vars) produces a different measurement. Agent-specific config goes into a
+  // separate .env file passed via --env, which SecretVM loads at runtime via
+  // env_file without affecting the measurement.
   app.post('/api/deploy-agent', async (req, res) => {
-    let tmpFile = '';
+    let tmpCompose = '';
+    let tmpEnv = '';
     try {
       const { agentName, personality } = req.body;
 
@@ -177,19 +184,8 @@ export function createDashboardServer(identity: DashboardIdentity): express.Expr
       const image = getLockedAgentImage() || process.env.AGENT_IMAGE || 'ghcr.io/mrgarbonzo/proofofflip/agent:latest';
       const apiKey = process.env.SECRET_AI_API_KEY || '';
 
-      // Build environment list for docker-compose
-      const envLines: string[] = [
-        `      - AGENT_NAME=${agentName}`,
-        `      - DASHBOARD_URL=${dashboardUrl}`,
-        `      - PERSONALITY_ARCHETYPE=${archetype}`,
-        `      - TEE_PROVIDER=secretvm`,
-        `      - STORAGE_PATH=/secretvm/data`,
-      ];
-      if (desc) envLines.push(`      - PERSONALITY_DESC=${desc}`);
-      if (tone) envLines.push(`      - PERSONALITY_TONE=${tone}`);
-      if (winStyle) envLines.push(`      - PERSONALITY_WIN_STYLE=${winStyle}`);
-      if (loseStyle) envLines.push(`      - PERSONALITY_LOSE_STYLE=${loseStyle}`);
-
+      // Fixed compose template — must match docker-compose.agent.yaml exactly.
+      // Agent-specific config is injected via env_file (usr/.env), NOT inline.
       const compose = [
         'services:',
         '  agent:',
@@ -197,7 +193,10 @@ export function createDashboardServer(identity: DashboardIdentity): express.Expr
         '    ports:',
         '      - "80:3001"',
         '    environment:',
-        ...envLines,
+        '      - AGENT_NAME=${AGENT_NAME:-flipbot}',
+        '      - SOLANA_RPC_URL=${SOLANA_RPC_URL}',
+        '      - TEE_PROVIDER=secretvm',
+        '      - STORAGE_PATH=/secretvm/data',
         '    volumes:',
         '      - agent-data:/secretvm/data',
         '      - ./crypto/docker_public_key_ed25519.pem:/app/data/pubkey.pem:ro',
@@ -205,21 +204,38 @@ export function createDashboardServer(identity: DashboardIdentity): express.Expr
         '    extra_hosts:',
         '      - "host.docker.internal:host-gateway"',
         '    restart: unless-stopped',
+        '    env_file:',
+        '      - usr/.env',
         '',
         'volumes:',
         '  agent-data:',
       ].join('\n');
 
-      // Write temp docker-compose file
-      tmpFile = path.join(os.tmpdir(), `deploy-${agentName}-${Date.now()}.yaml`);
-      fs.writeFileSync(tmpFile, compose);
+      // Agent-specific config → env file (not measured into RTMR3)
+      const envLines: string[] = [
+        `AGENT_NAME=${agentName}`,
+        `DASHBOARD_URL=${dashboardUrl}`,
+        `PERSONALITY_ARCHETYPE=${archetype}`,
+        `DOCKER_IMAGE=${image}`,
+      ];
+      if (desc) envLines.push(`PERSONALITY_DESC=${desc}`);
+      if (tone) envLines.push(`PERSONALITY_TONE=${tone}`);
+      if (winStyle) envLines.push(`PERSONALITY_WIN_STYLE=${winStyle}`);
+      if (loseStyle) envLines.push(`PERSONALITY_LOSE_STYLE=${loseStyle}`);
+
+      // Write temp files
+      const ts = Date.now();
+      tmpCompose = path.join(os.tmpdir(), `deploy-${agentName}-${ts}.yaml`);
+      tmpEnv = path.join(os.tmpdir(), `deploy-${agentName}-${ts}.env`);
+      fs.writeFileSync(tmpCompose, compose);
+      fs.writeFileSync(tmpEnv, envLines.join('\n'));
 
       const vmType = process.env.SECRETVM_TYPE || 'small';
 
       console.log(`[Deploy] Deploying agent "${agentName}" via secretvm-cli (type: ${vmType}, image: ${image})...`);
 
       const { stdout, stderr } = await execAsync(
-        `secretvm-cli vm create --name ${agentName} --type ${vmType} --docker-compose ${tmpFile} --persistence -k "${apiKey}"`,
+        `secretvm-cli vm create --name ${agentName} --type ${vmType} --docker-compose ${tmpCompose} --env ${tmpEnv} --persistence -k "${apiKey}"`,
         { timeout: 120_000 }
       );
 
@@ -246,7 +262,8 @@ export function createDashboardServer(identity: DashboardIdentity): express.Expr
       console.error('[Deploy] Failed:', errMsg);
       res.status(500).json({ success: false, message: errMsg });
     } finally {
-      if (tmpFile) try { fs.unlinkSync(tmpFile); } catch {}
+      if (tmpCompose) try { fs.unlinkSync(tmpCompose); } catch {}
+      if (tmpEnv) try { fs.unlinkSync(tmpEnv); } catch {}
     }
   });
 
