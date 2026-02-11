@@ -10,6 +10,7 @@ services:
       - TEE_PROVIDER=mock
       - STORAGE_PATH=/data
       - SECRET_AI_API_KEY=${SECRET_AI_API_KEY:-}
+      - SECRETVM_API_KEY=${SECRETVM_API_KEY:-}
     volumes:
       - dashboard-data:/data
     healthcheck:

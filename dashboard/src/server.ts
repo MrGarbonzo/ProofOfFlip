@@ -4,7 +4,7 @@ import fs from 'fs';
 import os from 'os';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { registerAgent } from './registry';
+import { registerAgent, getLockedAgentImage } from './registry';
 import { battlePool, leaderboard } from './state';
 import { sseHandler, clientCount, broadcast } from './sse';
 import { getWalletAddress, getSOLBalance, getUSDCBalance, getSOLBalanceOf } from './wallet';
@@ -173,7 +173,8 @@ export function createDashboardServer(identity: DashboardIdentity): express.Expr
       const loseStyle = sanitize(personality?.loseStyle);
 
       const dashboardUrl = process.env.DASHBOARD_PUBLIC_URL || 'https://flip.mrgarbonzo.com';
-      const image = process.env.AGENT_IMAGE || 'ghcr.io/mrgarbonzo/proofofflip/agent:latest';
+      // Use the locked image from TOFU (first agent's birth cert), env override, or fallback
+      const image = getLockedAgentImage() || process.env.AGENT_IMAGE || 'ghcr.io/mrgarbonzo/proofofflip/agent:latest';
       const apiKey = process.env.SECRETVM_API_KEY || '';
 
       // Build environment list for docker-compose
@@ -209,15 +210,28 @@ export function createDashboardServer(identity: DashboardIdentity): express.Expr
       tmpFile = path.join(os.tmpdir(), `deploy-${agentName}-${Date.now()}.yaml`);
       fs.writeFileSync(tmpFile, compose);
 
-      console.log(`[Deploy] Deploying agent "${agentName}" via secretvm-cli...`);
+      const vmType = process.env.SECRETVM_TYPE || 'small';
+
+      console.log(`[Deploy] Deploying agent "${agentName}" via secretvm-cli (type: ${vmType}, image: ${image})...`);
 
       const { stdout, stderr } = await execAsync(
-        `secretvm-cli vm create --name ${agentName} --docker-compose ${tmpFile} --persistence --tls -k "${apiKey}"`,
+        `secretvm-cli vm create --name ${agentName} --type ${vmType} --docker-compose ${tmpFile} --persistence --tls -k "${apiKey}"`,
         { timeout: 120_000 }
       );
 
       console.log(`[Deploy] stdout: ${stdout}`);
       if (stderr) console.warn(`[Deploy] stderr: ${stderr}`);
+
+      // Check if CLI returned a JSON error
+      try {
+        const parsed = JSON.parse(stdout);
+        if (parsed.status === 'error') {
+          res.status(500).json({ success: false, message: parsed.log || 'secretvm-cli error' });
+          return;
+        }
+      } catch {
+        // stdout is not JSON — that's fine, treat as success
+      }
 
       res.json({ success: true, message: `Agent "${agentName}" deployed`, output: stdout });
     } catch (err: any) {

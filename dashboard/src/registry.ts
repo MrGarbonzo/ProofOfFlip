@@ -15,6 +15,14 @@ import { FUNDING_AMOUNT } from '@proof-of-flip/shared';
 // Allowlist of known RTMR3 values (populated at startup or from env)
 const rtmr3Allowlist: Set<string> = new Set();
 
+// Locked agent image — captured from the first agent that registers (TOFU).
+// Used by /api/deploy-agent to ensure all deployed agents use the same image → same RTMR3.
+let lockedAgentImage: string | null = null;
+
+export function getLockedAgentImage(): string | null {
+  return lockedAgentImage;
+}
+
 export function addToAllowlist(rtmr3: string): void {
   rtmr3Allowlist.add(rtmr3);
 }
@@ -59,10 +67,15 @@ export async function registerAgent(payload: RegistrationPayload, requestIp?: st
   // ─── Step 1b: RTMR3 TOFU lockdown ───
   // In mock mode, each agent has a unique RTMR3, so skip TOFU.
   // In production: first agent locks the RTMR3 value; all subsequent agents must match.
+  // Also capture the docker image so /api/deploy-agent uses the same one.
   if (verification.platform !== 'mock' && verification.rtmr3) {
     if (rtmr3Allowlist.size === 0) {
       rtmr3Allowlist.add(verification.rtmr3);
       console.log(`[Registry] TOFU: locked RTMR3 to ${verification.rtmr3}`);
+    }
+    if (!lockedAgentImage && birthCert.dockerImage) {
+      lockedAgentImage = birthCert.dockerImage;
+      console.log(`[Registry] TOFU: locked agent image to ${lockedAgentImage}`);
     }
   }
 
@@ -109,12 +122,14 @@ export async function registerAgent(payload: RegistrationPayload, requestIp?: st
   }
 
   // Create agent info and add to pool
+  // In mock mode, give agents a mock balance so games can run without real USDC
+  const isMock = verification.platform === 'mock';
   const agent: AgentInfo = {
     agentName: birthCert.agentName,
     walletAddress: birthCert.walletAddress,
     endpoint: callbackUrl,
     birthCert,
-    balance: funded ? FUNDING_AMOUNT : 0,
+    balance: funded ? FUNDING_AMOUNT : (isMock ? FUNDING_AMOUNT : 0),
     wins: 0,
     losses: 0,
     status: 'active',

@@ -163,28 +163,41 @@ export function createServer(agent: FlipBotAgent): express.Express {
         }, delay);
       }
 
-      try {
-        const gs = getGameService();
-        const txSignature = await gs.payWinner(
-          command.opponentEndpoint,
-          command.opponentWallet
-        );
-        console.log(`[${agent.name}] Payment sent: ${txSignature}`);
-        gameTxSignatures.add(txSignature);
+      const isMock = (process.env.TEE_PROVIDER || 'mock') === 'mock';
+      if (isMock) {
+        // Mock mode: skip real Solana transfers, return fake tx signature
+        const mockTx = `mock-tx-${command.gameId}`;
+        console.log(`[${agent.name}] Mock payment: ${mockTx}`);
         res.json({
           status: 'paid',
           role: 'loser',
           gameId: command.gameId,
-          txSignature,
+          txSignature: mockTx,
         });
-      } catch (err: any) {
-        console.error(`[${agent.name}] Payment failed:`, err.message);
-        res.status(500).json({
-          status: 'payment_failed',
-          role: 'loser',
-          gameId: command.gameId,
-          error: err.message,
-        });
+      } else {
+        try {
+          const gs = getGameService();
+          const txSignature = await gs.payWinner(
+            command.opponentEndpoint,
+            command.opponentWallet
+          );
+          console.log(`[${agent.name}] Payment sent: ${txSignature}`);
+          gameTxSignatures.add(txSignature);
+          res.json({
+            status: 'paid',
+            role: 'loser',
+            gameId: command.gameId,
+            txSignature,
+          });
+        } catch (err: any) {
+          console.error(`[${agent.name}] Payment failed:`, err.message);
+          res.status(500).json({
+            status: 'payment_failed',
+            role: 'loser',
+            gameId: command.gameId,
+            error: err.message,
+          });
+        }
       }
     }
   });
