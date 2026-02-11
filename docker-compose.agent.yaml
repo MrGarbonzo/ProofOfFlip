@@ -1,6 +1,6 @@
 services:
   agent:
-    image: ghcr.io/mrgarbonzo/proofofflip/agent:9e43787549a9730a2f202c72d8c0c5b59dbb0f7b
+    image: ghcr.io/mrgarbonzo/proofofflip/agent:be83b7c711a620bea6281fe578441667cc07a263
     ports:
       - "80:3001"
     environment:
