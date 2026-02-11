@@ -175,7 +175,7 @@ export function createDashboardServer(identity: DashboardIdentity): express.Expr
       const dashboardUrl = process.env.DASHBOARD_PUBLIC_URL || 'https://flip.mrgarbonzo.com';
       // Use the locked image from TOFU (first agent's birth cert), env override, or fallback
       const image = getLockedAgentImage() || process.env.AGENT_IMAGE || 'ghcr.io/mrgarbonzo/proofofflip/agent:latest';
-      const apiKey = process.env.SECRETVM_API_KEY || '';
+      const apiKey = process.env.SECRET_AI_API_KEY || '';
 
       // Build environment list for docker-compose
       const envLines: string[] = [
