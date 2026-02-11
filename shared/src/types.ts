@@ -25,10 +25,13 @@ export interface RegistrationPayload {
 export interface GameCommand {
   gameId: string;
   role: 'winner' | 'loser';
+  opponentName: string;
   opponentEndpoint: string;
   opponentWallet: string;
   stakeAmount: number;
   timestamp: number;
+  /** True if this agent should post trash talk first; other agent responds via chat */
+  talkFirst?: boolean;
 }
 
 export interface GameResult {
@@ -50,13 +53,28 @@ export interface AgentInfo {
   balance: number;
   wins: number;
   losses: number;
-  status: 'active' | 'broke' | 'offline';
+  status: 'active' | 'benched' | 'broke' | 'offline';
   registeredAt: number;
+  personality?: string;
+  totalDonations?: number;
+  currentStreak?: number;
+  longestStreak?: number;
+}
+
+export interface AgentMessage {
+  agent: string;
+  message: string;
+}
+
+export interface DonationEvent {
+  agent: string;
+  donor: string;
+  amount: number;
 }
 
 export interface SSEEvent {
-  type: 'game_result' | 'agent_joined' | 'agent_evicted';
-  data: GameResult | AgentInfo;
+  type: 'game_result' | 'agent_joined' | 'agent_evicted' | 'trash_talk' | 'agent_desperate' | 'donation';
+  data: GameResult | AgentInfo | AgentMessage | DonationEvent;
   timestamp: number;
 }
 

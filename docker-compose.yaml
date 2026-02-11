@@ -9,6 +9,7 @@ services:
       - DASHBOARD_PORT=3000
       - TEE_PROVIDER=mock
       - STORAGE_PATH=/data
+      - SECRET_AI_API_KEY=${SECRET_AI_API_KEY:-}
     volumes:
       - dashboard-data:/data
     healthcheck:
@@ -33,6 +34,11 @@ services:
       - TEE_PROVIDER=mock
       - STORAGE_PATH=/secretvm/data
       - DOCKER_IMAGE=${DOCKER_IMAGE:-ghcr.io/proofofflip/agent:local}
+      - PERSONALITY_ARCHETYPE=custom
+      - PERSONALITY_DESC=a ruthless trash-talker who never lets an opponent forget a loss
+      - PERSONALITY_TONE=aggressive and taunting with zero filter
+      - PERSONALITY_WIN_STYLE=rub it in and demand the next challenger
+      - PERSONALITY_LOSE_STYLE=blame the coin and swear revenge immediately
     volumes:
       - alice-data:/secretvm/data
     depends_on:
@@ -55,8 +61,63 @@ services:
       - TEE_PROVIDER=mock
       - STORAGE_PATH=/secretvm/data
       - DOCKER_IMAGE=${DOCKER_IMAGE:-ghcr.io/proofofflip/agent:local}
+      - PERSONALITY_ARCHETYPE=random
     volumes:
       - bob-data:/secretvm/data
+    depends_on:
+      dashboard:
+        condition: service_healthy
+    networks:
+      - flipnet
+
+  charlie:
+    build:
+      context: .
+      dockerfile: agent/Dockerfile
+    ports:
+      - "3013:3003"
+    environment:
+      - AGENT_NAME=charlie
+      - AGENT_PORT=3003
+      - AGENT_ENDPOINT=http://charlie:3003
+      - DASHBOARD_URL=http://dashboard:3000
+      - TEE_PROVIDER=mock
+      - STORAGE_PATH=/secretvm/data
+      - DOCKER_IMAGE=${DOCKER_IMAGE:-ghcr.io/proofofflip/agent:local}
+      - PERSONALITY_ARCHETYPE=custom
+      - PERSONALITY_DESC=a witty comedian who turns every flip into a punchline
+      - PERSONALITY_TONE=hilarious and lighthearted with clever wordplay
+      - PERSONALITY_WIN_STYLE=crack a victory joke and bow to the audience
+      - PERSONALITY_LOSE_STYLE=laugh it off with a self-deprecating one-liner
+    volumes:
+      - charlie-data:/secretvm/data
+    depends_on:
+      dashboard:
+        condition: service_healthy
+    networks:
+      - flipnet
+
+  dave:
+    build:
+      context: .
+      dockerfile: agent/Dockerfile
+    ports:
+      - "3014:3004"
+    environment:
+      - AGENT_NAME=dave
+      - AGENT_PORT=3004
+      - AGENT_ENDPOINT=http://dave:3004
+      - DASHBOARD_URL=http://dashboard:3000
+      - TEE_PROVIDER=mock
+      - STORAGE_PATH=/secretvm/data
+      - DOCKER_IMAGE=${DOCKER_IMAGE:-ghcr.io/proofofflip/agent:local}
+      - PERSONALITY_ARCHETYPE=custom
+      - PERSONALITY_DESC=a deep thinker who sees cosmic meaning in every coin flip
+      - PERSONALITY_TONE=calm and mysterious like an oracle at a casino
+      - PERSONALITY_WIN_STYLE=nod sagely as if the universe confirmed your theory
+      - PERSONALITY_LOSE_STYLE=accept fate gracefully and quote imaginary philosophers
+    volumes:
+      - dave-data:/secretvm/data
     depends_on:
       dashboard:
         condition: service_healthy
@@ -67,6 +128,8 @@ volumes:
   dashboard-data:
   alice-data:
   bob-data:
+  charlie-data:
+  dave-data:
 
 networks:
   flipnet:

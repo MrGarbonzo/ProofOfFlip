@@ -4,7 +4,6 @@ import {
   AgentInfo,
   GAME_STAKE,
   MATCH_INTERVAL_MS,
-  MIN_BALANCE_TO_PLAY,
 } from '@proof-of-flip/shared';
 import { battlePool, leaderboard } from './state';
 import { broadcast } from './sse';
@@ -40,14 +39,19 @@ async function runGame(agentA: AgentInfo, agentB: AgentInfo): Promise<void> {
 
   const timestamp = Date.now();
 
+  // Randomly pick who talks first — the other responds via ChatListener
+  const winnerTalksFirst = randomBytes(1)[0] % 2 === 0;
+
   // Notify winner first (so they're ready to receive payment)
   const winnerCommand: GameCommand = {
     gameId,
     role: 'winner',
+    opponentName: loser.agentName,
     opponentEndpoint: loser.endpoint,
     opponentWallet: loser.walletAddress,
     stakeAmount: GAME_STAKE,
     timestamp,
+    talkFirst: winnerTalksFirst,
   };
   await postToAgent(winner.endpoint, '/play', winnerCommand);
 
@@ -55,10 +59,12 @@ async function runGame(agentA: AgentInfo, agentB: AgentInfo): Promise<void> {
   const loserCommand: GameCommand = {
     gameId,
     role: 'loser',
+    opponentName: winner.agentName,
     opponentEndpoint: winner.endpoint,
     opponentWallet: winner.walletAddress,
     stakeAmount: GAME_STAKE,
     timestamp,
+    talkFirst: !winnerTalksFirst,
   };
   const loserResponse = await postToAgent(loser.endpoint, '/play', loserCommand);
 
@@ -82,13 +88,32 @@ async function runGame(agentA: AgentInfo, agentB: AgentInfo): Promise<void> {
   loser.losses++;
   loser.balance -= GAME_STAKE;
 
-  // Evict broke agents
-  if (loser.balance < MIN_BALANCE_TO_PLAY) {
-    loser.status = 'broke';
-    console.log(`[Coordinator] ${loser.agentName} is broke! Evicting.`);
+  // Track win/loss streaks (positive = wins, negative = losses)
+  const ws = winner.currentStreak || 0;
+  winner.currentStreak = ws > 0 ? ws + 1 : 1;
+  if (winner.currentStreak > (winner.longestStreak || 0)) {
+    winner.longestStreak = winner.currentStreak;
+  }
+  const ls = loser.currentStreak || 0;
+  loser.currentStreak = ls < 0 ? ls - 1 : -1;
+
+  // Re-rank: promotes/demotes agents based on new balances
+  const { promoted, benched } = battlePool.reRank();
+
+  for (const agent of benched) {
+    console.log(`[Coordinator] ${agent.agentName} has been benched (${agent.status})`);
     broadcast({
       type: 'agent_evicted',
-      data: loser,
+      data: agent,
+      timestamp: Date.now(),
+    });
+  }
+
+  for (const agent of promoted) {
+    console.log(`[Coordinator] ${agent.agentName} promoted to active!`);
+    broadcast({
+      type: 'agent_joined',
+      data: agent,
       timestamp: Date.now(),
     });
   }
@@ -106,7 +131,13 @@ let intervalId: NodeJS.Timeout | null = null;
 export function startCoordinator(): void {
   console.log(`[Coordinator] Starting match loop (interval: ${MATCH_INTERVAL_MS / 1000}s)`);
 
+  // Initial rank on startup
+  battlePool.reRank();
+
   intervalId = setInterval(async () => {
+    // Re-rank before picking (donations may have changed balances)
+    battlePool.reRank();
+
     const pair = battlePool.pickRandomPair();
     if (!pair) {
       console.log('[Coordinator] Not enough active agents for a game');

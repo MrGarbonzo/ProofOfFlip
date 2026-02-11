@@ -1,4 +1,4 @@
-import { AgentInfo, GameResult } from '@proof-of-flip/shared';
+import { AgentInfo, GameResult, MIN_BALANCE_TO_PLAY, MAX_ACTIVE_AGENTS } from '@proof-of-flip/shared';
 
 export class BattlePool {
   private agents: Map<string, AgentInfo> = new Map();
@@ -47,6 +47,49 @@ export class BattlePool {
 
   activeCount(): number {
     return this.getActive().length;
+  }
+
+  /**
+   * Re-rank agents: top N by balance are 'active', rest are 'benched' or 'broke'.
+   * Returns arrays of newly promoted and newly benched agents for event broadcasting.
+   */
+  reRank(): { promoted: AgentInfo[]; benched: AgentInfo[] } {
+    const promoted: AgentInfo[] = [];
+    const benched: AgentInfo[] = [];
+
+    // Only consider non-offline agents
+    const eligible = Array.from(this.agents.values())
+      .filter(a => a.status !== 'offline');
+
+    // Sort by balance descending
+    eligible.sort((a, b) => b.balance - a.balance);
+
+    for (let i = 0; i < eligible.length; i++) {
+      const agent = eligible[i];
+
+      if (agent.balance < MIN_BALANCE_TO_PLAY) {
+        // Broke — can't play regardless of rank
+        if (agent.status !== 'broke') {
+          agent.status = 'broke';
+          benched.push(agent);
+        }
+      } else if (i < MAX_ACTIVE_AGENTS) {
+        // Top N — active
+        if (agent.status !== 'active') {
+          const wasBenched = agent.status === 'benched' || agent.status === 'broke';
+          agent.status = 'active';
+          if (wasBenched) promoted.push(agent);
+        }
+      } else {
+        // Outside top N — benched
+        if (agent.status !== 'benched') {
+          agent.status = 'benched';
+          benched.push(agent);
+        }
+      }
+    }
+
+    return { promoted, benched };
   }
 }
 

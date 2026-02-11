@@ -1,12 +1,16 @@
 import express from 'express';
 import path from 'path';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 import { registerAgent } from './registry';
 import { battlePool, leaderboard } from './state';
-import { sseHandler, clientCount } from './sse';
+import { sseHandler, clientCount, broadcast } from './sse';
 import { getWalletAddress, getSOLBalance, getUSDCBalance, getSOLBalanceOf } from './wallet';
 import { fundAgentSol } from './funding';
 import { SOL_TOPUP_THRESHOLD_LAMPORTS } from '@proof-of-flip/shared';
 import { DashboardIdentity } from './identity';
+
+const execAsync = promisify(exec);
 
 export function createDashboardServer(identity: DashboardIdentity): express.Express {
   const app = express();
@@ -56,6 +60,10 @@ export function createDashboardServer(identity: DashboardIdentity): express.Expr
         wins: a.wins,
         losses: a.losses,
         status: a.status,
+        registeredAt: a.registeredAt,
+        totalDonations: a.totalDonations || 0,
+        currentStreak: a.currentStreak || 0,
+        longestStreak: a.longestStreak || 0,
         dockerImage: a.birthCert.dockerImage,
         rtmr3: a.birthCert.rtmr3,
         teePubkey: a.birthCert.teePubkey,
@@ -116,10 +124,10 @@ export function createDashboardServer(identity: DashboardIdentity): express.Expr
         return;
       }
 
-      // Agent must be registered and active
+      // Agent must be registered (active or benched — benched agents still need gas for donations)
       const agent = battlePool.get(walletAddress);
-      if (!agent || agent.status !== 'active') {
-        res.status(404).json({ success: false, message: 'Agent not found or not active' });
+      if (!agent || agent.status === 'offline') {
+        res.status(404).json({ success: false, message: 'Agent not found or offline' });
         return;
       }
 
@@ -139,6 +147,98 @@ export function createDashboardServer(identity: DashboardIdentity): express.Expr
     } catch (err: any) {
       res.status(500).json({ success: false, message: err.message });
     }
+  });
+
+  // POST /api/deploy-agent — Deploy a new agent via SecretVM CLI
+  app.post('/api/deploy-agent', async (req, res) => {
+    try {
+      const { agentName, personality } = req.body;
+
+      // Validate agent name (alphanumeric, hyphens, underscores only)
+      if (!agentName || !/^[a-zA-Z0-9_-]{1,20}$/.test(agentName)) {
+        res.status(400).json({ success: false, message: 'Invalid agent name (alphanumeric, max 20 chars)' });
+        return;
+      }
+
+      const archetype = String(personality?.archetype || 'random').replace(/[^a-z_]/g, '');
+
+      // Sanitize custom personality fields (strip quotes to prevent injection)
+      const sanitize = (s: string | undefined) => String(s || '').replace(/["\\]/g, '').slice(0, 200);
+      const desc = sanitize(personality?.description);
+      const tone = sanitize(personality?.tone);
+      const winStyle = sanitize(personality?.winStyle);
+      const loseStyle = sanitize(personality?.loseStyle);
+
+      const dashboardUrl = process.env.DASHBOARD_PUBLIC_URL || 'https://flip.mrgarbonzo.com';
+      const image = process.env.AGENT_IMAGE || 'ghcr.io/mrgarbonzo/proofofflip/agent:latest';
+      console.log(`[Deploy] Deploying agent "${agentName}" via SecretVM CLI...`);
+
+      let envArgs =
+        ` --env AGENT_NAME="${agentName}"` +
+        ` --env DASHBOARD_URL="${dashboardUrl}"` +
+        ` --env PERSONALITY_ARCHETYPE="${archetype}"` +
+        ` --env TEE_PROVIDER="secretvm"`;
+
+      if (desc) envArgs += ` --env PERSONALITY_DESC="${desc}"`;
+      if (tone) envArgs += ` --env PERSONALITY_TONE="${tone}"`;
+      if (winStyle) envArgs += ` --env PERSONALITY_WIN_STYLE="${winStyle}"`;
+      if (loseStyle) envArgs += ` --env PERSONALITY_LOSE_STYLE="${loseStyle}"`;
+
+      const { stdout, stderr } = await execAsync(
+        `secretvm deploy ${image} --name ${agentName}${envArgs}`,
+        { timeout: 120_000 }
+      );
+
+      console.log(`[Deploy] stdout: ${stdout}`);
+      if (stderr) console.warn(`[Deploy] stderr: ${stderr}`);
+
+      res.json({ success: true, message: `Agent "${agentName}" deployed`, output: stdout });
+    } catch (err: any) {
+      console.error('[Deploy] Failed:', err.message);
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // POST /api/agent-message — Agent broadcasts a message (trash talk, reactions)
+  app.post('/api/agent-message', (req, res) => {
+    const { agentName, message, urgency } = req.body;
+    if (!agentName || !message) {
+      res.status(400).json({ success: false, message: 'agentName and message required' });
+      return;
+    }
+
+    broadcast({
+      type: urgency === 'desperate' ? 'agent_desperate' : 'trash_talk',
+      data: { agent: agentName, message },
+      timestamp: Date.now(),
+    });
+
+    res.json({ success: true });
+  });
+
+  // POST /api/donation-confirmed — Agent confirms an on-chain donation
+  app.post('/api/donation-confirmed', (req, res) => {
+    const { agentName, donor, amount } = req.body;
+    if (!agentName || !donor || amount == null) {
+      res.status(400).json({ success: false, message: 'agentName, donor, and amount required' });
+      return;
+    }
+
+    // Update agent's donation total
+    const agent = battlePool.getByName(agentName);
+    if (agent) {
+      agent.totalDonations = (agent.totalDonations || 0) + Number(amount);
+    }
+
+    const shortDonor = donor.length > 12 ? donor.slice(0, 4) + '...' + donor.slice(-4) : donor;
+
+    broadcast({
+      type: 'donation',
+      data: { agent: agentName, donor: shortDonor, amount: Number(amount) },
+      timestamp: Date.now(),
+    });
+
+    res.json({ success: true });
   });
 
   // GET /api/events — SSE stream

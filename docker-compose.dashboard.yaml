@@ -8,6 +8,8 @@ services:
       - TEE_PROVIDER=secretvm
       - STORAGE_PATH=/data
       - SOLANA_RPC_URL=${SOLANA_RPC_URL}
+      - ALLOWED_RTMR3=${ALLOWED_RTMR3}
+      - SECRET_AI_API_KEY=${SECRET_AI_API_KEY}
     volumes:
       - dashboard-data:/data
       - ./crypto/docker_public_key_ed25519.pem:/app/data/pubkey.pem:ro

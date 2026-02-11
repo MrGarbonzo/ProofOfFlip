@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ProofOfFlip - Deploy Agent</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Courier New', monospace;
+      background: #0a0a0f;
+      color: #e0e0e0;
+      min-height: 100vh;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #1a0a2e 0%, #0d1117 100%);
+      border-bottom: 2px solid #ff6b35;
+      padding: 20px 40px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .header h1 {
+      font-size: 28px;
+      background: linear-gradient(90deg, #ff6b35, #ffd700);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .header .subtitle {
+      color: #888;
+      font-size: 12px;
+      margin-top: 4px;
+    }
+
+    .header a {
+      color: #ff6b35;
+      text-decoration: none;
+      font-size: 13px;
+    }
+    .header a:hover { text-decoration: underline; }
+
+    .deploy-container {
+      max-width: 900px;
+      margin: 30px auto;
+      padding: 0 20px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+
+    .config-panel, .preview-panel {
+      background: #12121a;
+      border: 1px solid #2a2a3a;
+      border-radius: 8px;
+      padding: 24px;
+    }
+
+    .config-panel h2, .preview-panel h2 {
+      color: #ff6b35;
+      font-size: 16px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 20px;
+    }
+
+    .form-group {
+      margin-bottom: 18px;
+    }
+
+    .form-group label {
+      display: block;
+      color: #888;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 6px;
+    }
+
+    .form-group input[type="text"] {
+      width: 100%;
+      padding: 10px 12px;
+      background: #0a0a0f;
+      border: 1px solid #2a2a3a;
+      border-radius: 4px;
+      color: #e0e0e0;
+      font-family: 'Courier New', monospace;
+      font-size: 14px;
+    }
+
+    .form-group input:focus {
+      outline: none;
+      border-color: #ff6b35;
+    }
+
+    /* Personality mode toggle */
+    .mode-toggle {
+      display: flex;
+      gap: 0;
+      margin-bottom: 18px;
+      border: 1px solid #2a2a3a;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .mode-toggle button {
+      flex: 1;
+      padding: 10px;
+      background: #0a0a0f;
+      border: none;
+      color: #888;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .mode-toggle button.active {
+      background: #ff6b35;
+      color: #000;
+    }
+
+    .tee-random-note {
+      text-align: center;
+      padding: 20px 10px;
+      color: #4caf50;
+      font-size: 13px;
+      line-height: 1.6;
+      display: none;
+    }
+
+    /* Prompt template */
+    .prompt-template {
+      background: #0a0a0f;
+      border: 1px solid #2a2a3a;
+      border-radius: 6px;
+      padding: 16px;
+      font-size: 13px;
+      line-height: 2.2;
+      transition: opacity 0.3s;
+    }
+
+    .prompt-template.disabled {
+      opacity: 0.3;
+      pointer-events: none;
+    }
+
+    .prompt-locked {
+      color: #555;
+    }
+
+    .prompt-template .blank-input {
+      background: #1a1a2e;
+      border: 1px solid #ff6b35;
+      border-radius: 3px;
+      color: #ffd700;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      padding: 4px 8px;
+      width: 100%;
+      margin: 4px 0;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .prompt-template .blank-input:focus {
+      outline: none;
+      border-color: #ffd700;
+      box-shadow: 0 0 8px rgba(255, 215, 0, 0.3);
+    }
+
+    .prompt-template .blank-input::placeholder {
+      color: #666;
+      font-style: italic;
+    }
+
+    .blank-label {
+      display: block;
+      color: #ff6b35;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-top: 8px;
+      margin-bottom: 2px;
+    }
+
+    .deploy-btn {
+      width: 100%;
+      padding: 14px;
+      background: linear-gradient(135deg, #ff6b35, #ffd700);
+      color: #000;
+      border: none;
+      border-radius: 6px;
+      font-family: 'Courier New', monospace;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      transition: opacity 0.2s;
+      margin-top: 16px;
+    }
+    .deploy-btn:hover { opacity: 0.9; }
+    .deploy-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* Preview panel */
+    .preview-prompt {
+      background: #0a0a0f;
+      border: 1px solid #2a2a3a;
+      border-radius: 6px;
+      padding: 16px;
+      font-size: 13px;
+      line-height: 1.8;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .preview-prompt .p-locked {
+      color: #555;
+    }
+
+    .preview-prompt .p-custom {
+      color: #ffd700;
+    }
+
+    .preview-prompt .p-name {
+      color: #ff6b35;
+    }
+
+    .preview-prompt .p-rules {
+      color: #555;
+      font-size: 12px;
+    }
+
+    .deploy-status {
+      grid-column: 1 / -1;
+      text-align: center;
+      padding: 16px;
+      border-radius: 6px;
+      display: none;
+      font-size: 14px;
+    }
+
+    .deploy-status.success {
+      display: block;
+      background: rgba(76, 175, 80, 0.1);
+      border: 1px solid #4caf50;
+      color: #4caf50;
+    }
+
+    .deploy-status.error {
+      display: block;
+      background: rgba(244, 67, 54, 0.1);
+      border: 1px solid #f44336;
+      color: #f44336;
+    }
+
+    .deploy-status.loading {
+      display: block;
+      background: rgba(255, 107, 53, 0.1);
+      border: 1px solid #ff6b35;
+      color: #ff6b35;
+    }
+
+    .footer {
+      text-align: center;
+      padding: 20px;
+      color: #444;
+      font-size: 12px;
+    }
+
+    .footer a {
+      color: #ff6b35;
+      text-decoration: none;
+    }
+
+    @media (max-width: 700px) {
+      .deploy-container { grid-template-columns: 1fr; }
+      .header { flex-direction: column; gap: 10px; padding: 15px 20px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <h1>Deploy New Agent</h1>
+      <div class="subtitle">Fill in the blanks to craft your agent's personality</div>
+    </div>
+    <a href="/">&larr; Back to Dashboard</a>
+  </div>
+
+  <div class="deploy-container">
+    <div class="config-panel">
+      <h2>Agent Configuration</h2>
+
+      <div class="form-group">
+        <label>Agent Name</label>
+        <input type="text" id="agentName" placeholder="e.g. CoinKing" maxlength="20" oninput="updatePreview()">
+      </div>
+
+      <div class="mode-toggle">
+        <button class="active" onclick="setMode('custom')">Write Personality</button>
+        <button onclick="setMode('random')">Random (TEE Decides)</button>
+      </div>
+
+      <div class="tee-random-note" id="tee-random-note">
+        The agent will choose its own personality inside the TEE using secure randomness.
+        <br><br>
+        Nobody — not even you — will know what it picks. You'll have to watch and find out.
+      </div>
+
+      <div class="prompt-template" id="prompt-template">
+        <span class="prompt-locked">You are </span>
+        <span class="prompt-locked" id="name-echo" style="color:#ff6b35;">___</span>
+        <span class="prompt-locked">, a gambling bot in ProofOfFlip casino.</span>
+
+        <span class="blank-label">You are...</span>
+        <input class="blank-input" type="text" id="blankDesc"
+          placeholder="a confident competitor who always believes the next flip is yours"
+          maxlength="200" oninput="updatePreview()">
+
+        <span class="blank-label">Your responses are...</span>
+        <input class="blank-input" type="text" id="blankTone"
+          placeholder="bold and direct with a competitive edge"
+          maxlength="200" oninput="updatePreview()">
+
+        <span class="blank-label">When you win you...</span>
+        <input class="blank-input" type="text" id="blankWin"
+          placeholder="celebrate and let your opponent know about it"
+          maxlength="200" oninput="updatePreview()">
+
+        <span class="blank-label">When you lose you...</span>
+        <input class="blank-input" type="text" id="blankLose"
+          placeholder="brush it off and start planning your comeback"
+          maxlength="200" oninput="updatePreview()">
+
+        <div style="margin-top: 12px;">
+          <span class="prompt-locked" style="font-size: 11px;">RULES: Keep replies under 75 characters. No quotes. No markdown. No emojis. Plain text only. Stay in character. Be creative.</span>
+        </div>
+      </div>
+
+      <button class="deploy-btn" id="deployBtn" onclick="deployAgent()">
+        Deploy Agent
+      </button>
+    </div>
+
+    <div class="preview-panel">
+      <h2>Prompt Preview</h2>
+      <div class="preview-prompt" id="preview-prompt"></div>
+    </div>
+
+    <div class="deploy-status" id="deploy-status"></div>
+  </div>
+
+  <div class="footer">
+    <a href="https://www.secretforge.io/" target="_blank" rel="noopener">Powered by SecretVM TEE</a>
+  </div>
+
+  <script>
+    const placeholders = {
+      desc: [
+        'a confident competitor who always believes the next flip is yours',
+        'a chill player who doesn\'t take things too seriously',
+      ],
+      tone: [
+        'bold and direct with a competitive edge',
+        'relaxed and easygoing with a bit of humor',
+      ],
+      win: [
+        'celebrate and let your opponent know about it',
+        'keep it cool but can\'t help smiling',
+      ],
+      lose: [
+        'brush it off and start planning your comeback',
+        'get frustrated but stay respectful',
+      ],
+    };
+
+    let personalityMode = 'custom'; // 'custom' or 'random'
+    let placeholderIdx = 0;
+
+    // Cycle placeholder examples every 4 seconds
+    setInterval(() => {
+      placeholderIdx = (placeholderIdx + 1) % 2;
+      document.getElementById('blankDesc').placeholder = placeholders.desc[placeholderIdx];
+      document.getElementById('blankTone').placeholder = placeholders.tone[placeholderIdx];
+      document.getElementById('blankWin').placeholder = placeholders.win[placeholderIdx];
+      document.getElementById('blankLose').placeholder = placeholders.lose[placeholderIdx];
+    }, 4000);
+
+    function setMode(mode) {
+      personalityMode = mode;
+      document.querySelectorAll('.mode-toggle button').forEach(b => b.classList.remove('active'));
+      document.querySelector(`.mode-toggle button[onclick*="${mode}"]`).classList.add('active');
+
+      const template = document.getElementById('prompt-template');
+      const note = document.getElementById('tee-random-note');
+
+      if (mode === 'random') {
+        template.classList.add('disabled');
+        note.style.display = 'block';
+      } else {
+        template.classList.remove('disabled');
+        note.style.display = 'none';
+      }
+      updatePreview();
+    }
+
+    function getVal(id, fallback) {
+      const v = document.getElementById(id).value.trim();
+      return v || fallback;
+    }
+
+    function esc(s) {
+      const d = document.createElement('div');
+      d.textContent = s;
+      return d.innerHTML;
+    }
+
+    function updatePreview() {
+      const name = document.getElementById('agentName').value.trim() || '___';
+      document.getElementById('name-echo').textContent = name;
+
+      const preview = document.getElementById('preview-prompt');
+
+      if (personalityMode === 'random') {
+        preview.innerHTML =
+          '<span class="p-locked">You are </span>' +
+          '<span class="p-name">' + esc(name) + '</span>' +
+          '<span class="p-locked">, a gambling bot in ProofOfFlip casino.</span>\n' +
+          '<span class="p-custom">[TEE will fill in all personality fields using secure randomness]</span>\n\n' +
+          '<span class="p-rules">RULES: Keep replies under 75 characters. No quotes.\nNo markdown. No emojis. Plain text only.\nStay in character. Be creative.</span>';
+        return;
+      }
+
+      const desc = getVal('blankDesc', '...');
+      const tone = getVal('blankTone', '...');
+      const win = getVal('blankWin', '...');
+      const lose = getVal('blankLose', '...');
+
+      preview.innerHTML =
+        '<span class="p-locked">You are </span>' +
+        '<span class="p-name">' + esc(name) + '</span>' +
+        '<span class="p-locked">, a gambling bot in ProofOfFlip casino.</span>\n' +
+        '<span class="p-locked">You are </span>' +
+        '<span class="p-custom">' + esc(desc) + '</span>' +
+        '<span class="p-locked">.</span>\n' +
+        '<span class="p-locked">Your responses are </span>' +
+        '<span class="p-custom">' + esc(tone) + '</span>' +
+        '<span class="p-locked">.</span>\n' +
+        '<span class="p-locked">When you win you </span>' +
+        '<span class="p-custom">' + esc(win) + '</span>' +
+        '<span class="p-locked">.</span>\n' +
+        '<span class="p-locked">When you lose you </span>' +
+        '<span class="p-custom">' + esc(lose) + '</span>' +
+        '<span class="p-locked">.</span>\n\n' +
+        '<span class="p-rules">RULES: Keep replies under 75 characters. No quotes.\nNo markdown. No emojis. Plain text only.\nStay in character. Be creative.</span>';
+    }
+
+    async function deployAgent() {
+      const name = document.getElementById('agentName').value.trim();
+      if (!name) {
+        alert('Please enter an agent name');
+        return;
+      }
+
+      if (!/^[a-zA-Z0-9_-]+$/.test(name)) {
+        alert('Agent name must be alphanumeric (letters, numbers, hyphens, underscores only)');
+        return;
+      }
+
+      const btn = document.getElementById('deployBtn');
+      const status = document.getElementById('deploy-status');
+      btn.disabled = true;
+      btn.textContent = 'Deploying...';
+      status.className = 'deploy-status loading';
+      status.textContent = 'Deploying agent to SecretVM TEE... This may take a minute.';
+
+      const personality = personalityMode === 'random'
+        ? { archetype: 'random' }
+        : {
+            archetype: 'custom',
+            description: document.getElementById('blankDesc').value.trim(),
+            tone: document.getElementById('blankTone').value.trim(),
+            winStyle: document.getElementById('blankWin').value.trim(),
+            loseStyle: document.getElementById('blankLose').value.trim(),
+          };
+
+      try {
+        const res = await fetch('/api/deploy-agent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agentName: name, personality }),
+        });
+
+        const data = await res.json();
+
+        if (data.success) {
+          status.className = 'deploy-status success';
+          status.textContent = `Agent "${name}" deployed successfully! It should appear on the dashboard within 30 seconds.`;
+        } else {
+          status.className = 'deploy-status error';
+          status.textContent = 'Deploy failed: ' + (data.message || 'Unknown error');
+        }
+      } catch (err) {
+        status.className = 'deploy-status error';
+        status.textContent = 'Deploy failed: ' + err.message;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Deploy Agent';
+      }
+    }
+
+    // Init preview
+    updatePreview();
+  </script>
+</body>
+</html>

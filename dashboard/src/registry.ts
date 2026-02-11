@@ -24,6 +24,7 @@ export async function registerAgent(payload: RegistrationPayload, requestIp?: st
   message: string;
   agent?: AgentInfo;
   verification?: VerificationResult;
+  secretAiKey?: string;
 }> {
   const { birthCert, signature } = payload;
 
@@ -54,6 +55,16 @@ export async function registerAgent(payload: RegistrationPayload, requestIp?: st
   }
 
   console.log(`[Registry] TEE verified: ${birthCert.agentName} (platform: ${verification.platform}, rtmr3: ${verification.rtmr3?.substring(0, 16)}...)`);
+
+  // ─── Step 1b: RTMR3 TOFU lockdown ───
+  // In mock mode, each agent has a unique RTMR3, so skip TOFU.
+  // In production: first agent locks the RTMR3 value; all subsequent agents must match.
+  if (verification.platform !== 'mock' && verification.rtmr3) {
+    if (rtmr3Allowlist.size === 0) {
+      rtmr3Allowlist.add(verification.rtmr3);
+      console.log(`[Registry] TOFU: locked RTMR3 to ${verification.rtmr3}`);
+    }
+  }
 
   // ─── Step 2: Verify wallet signature ───
   // The walletSignature proves the Solana wallet key also signed the same birth cert.
@@ -120,5 +131,11 @@ export async function registerAgent(payload: RegistrationPayload, requestIp?: st
 
   console.log(`[Registry] Agent ${birthCert.agentName} registered (wallet: ${birthCert.walletAddress}, funded: ${funded}, platform: ${verification.platform})`);
 
-  return { success: true, message: 'Registration successful', agent, verification };
+  return {
+    success: true,
+    message: 'Registration successful',
+    agent,
+    verification,
+    secretAiKey: process.env.SECRET_AI_API_KEY || undefined,
+  };
 }

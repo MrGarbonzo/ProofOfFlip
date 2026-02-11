@@ -1,6 +1,8 @@
 import { FlipBotAgent } from './agent';
-import { createServer } from './server';
+import { createServer, gameTxSignatures } from './server';
 import { registerWithDashboard } from './registration';
+import { DonationMonitor } from './donation-monitor';
+import { ChatListener } from './chat-listener';
 import { DASHBOARD_URL } from '@proof-of-flip/shared';
 
 async function main() {
@@ -26,11 +28,34 @@ async function main() {
   // 3. Register with dashboard (retry on failure)
   const maxRetries = 5;
   for (let i = 0; i < maxRetries; i++) {
-    const success = await registerWithDashboard(agent, dashboardUrl, agentEndpoint);
-    if (success) break;
+    const result = await registerWithDashboard(agent, dashboardUrl, agentEndpoint);
+    if (result.success) {
+      if (result.secretAiKey) {
+        agent.personality.setApiKey(result.secretAiKey);
+        console.log(`[${agentName}] SecretAI key received from dashboard`);
+      }
+      break;
+    }
     console.log(`[${agentName}] Retry registration in 5s... (${i + 1}/${maxRetries})`);
     await new Promise(r => setTimeout(r, 5000));
   }
+
+  // 4. Start donation monitor (skip in mock mode — no real on-chain donations)
+  if (process.env.TEE_PROVIDER !== 'mock') {
+    const donationMonitor = new DonationMonitor(
+      agent.walletAddress,
+      agentName,
+      agent.personality,
+      gameTxSignatures,
+    );
+    donationMonitor.start();
+  } else {
+    console.log(`[${agentName}] Mock mode — donation monitor disabled`);
+  }
+
+  // 5. Start chat listener — reads SSE feed and replies to other agents
+  const chatListener = new ChatListener(agentName, agent.personality, dashboardUrl);
+  chatListener.start();
 
   console.log(`[${agentName}] Ready for games!`);
 }

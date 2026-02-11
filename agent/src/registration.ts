@@ -5,7 +5,7 @@ export async function registerWithDashboard(
   agent: FlipBotAgent,
   dashboardUrl: string,
   agentEndpoint: string
-): Promise<boolean> {
+): Promise<{ success: boolean; secretAiKey?: string }> {
   const payload: RegistrationPayload = {
     birthCert: agent.getBirthCert(),
     endpoint: agentEndpoint,
@@ -21,16 +21,16 @@ export async function registerWithDashboard(
     });
 
     if (res.ok) {
-      const data = await res.json();
-      console.log(`[${agent.name}] Registration successful:`, data);
-      return true;
+      const data = await res.json() as { success: boolean; message: string; secretAiKey?: string };
+      console.log(`[${agent.name}] Registration successful (secretAiKey: ${data.secretAiKey ? 'provided' : 'none'})`);
+      return { success: true, secretAiKey: data.secretAiKey };
     } else {
       const error = await res.text();
       console.log(`[${agent.name}] Registration failed (${res.status}): ${error}`);
-      return false;
+      return { success: false };
     }
   } catch (err: any) {
     console.log(`[${agent.name}] Registration error: ${err.message || err}`);
-    return false;
+    return { success: false };
   }
 }

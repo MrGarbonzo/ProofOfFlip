@@ -8,7 +8,11 @@ import {
   createTEEProvider,
   GAME_STAKE_LAMPORTS,
   USDC_MINT,
+  DASHBOARD_URL,
 } from '@proof-of-flip/shared';
+
+// Shared set of game tx signatures — donation monitor uses this to skip game payments
+export const gameTxSignatures: Set<string> = new Set();
 
 export function createServer(agent: FlipBotAgent): express.Express {
   const app = express();
@@ -26,6 +30,15 @@ export function createServer(agent: FlipBotAgent): express.Express {
       gameService = new GameService(agent.secretKey);
     }
     return gameService;
+  }
+
+  // Fire-and-forget message broadcast to dashboard
+  function broadcastMessage(message: string, urgency: string = 'normal'): void {
+    fetch(`${DASHBOARD_URL}/api/agent-message`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agentName: agent.name, message, urgency }),
+    }).catch(err => console.error('[Broadcast] Failed:', err.message));
   }
 
   // GET /health
@@ -88,6 +101,7 @@ export function createServer(agent: FlipBotAgent): express.Express {
         : paymentHeader;
 
       console.log(`[${agent.name}] Received payment:`, payment);
+      if (payment.txSignature) gameTxSignatures.add(payment.txSignature);
 
       res.json({
         status: 'collected',
@@ -102,15 +116,53 @@ export function createServer(agent: FlipBotAgent): express.Express {
   // POST /play — Dashboard sends game command
   app.post('/play', async (req, res) => {
     const command: GameCommand = req.body;
+    const opponentName = command.opponentName || 'opponent';
     console.log(`[${agent.name}] Game ${command.gameId}: I am the ${command.role}`);
 
     if (command.role === 'winner') {
       // Winner: just acknowledge — the loser will pay us via /collect
       console.log(`[${agent.name}] Won! Waiting for payment from ${command.opponentEndpoint}`);
       res.json({ status: 'acknowledged', role: 'winner', gameId: command.gameId });
+
+      // Track game
+      agent.recentGames.push({ opponent: opponentName, won: true });
+      if (agent.recentGames.length > 20) agent.recentGames.shift();
+
+      // Only post if talkFirst — other agent responds via ChatListener
+      if (command.talkFirst) {
+        const delay = 1000 + Math.random() * 3000; // 1-4s random delay
+        setTimeout(() => {
+          agent.personality.generateMessage({
+            timing: 'post_win',
+            opponent: opponentName,
+            amount: command.stakeAmount,
+            balance: command.stakeAmount,
+            recentGames: agent.recentGames,
+          }).then(msg => broadcastMessage(msg));
+        }, delay);
+      }
     } else {
       // Loser: initiate payment to winner's /collect endpoint
       console.log(`[${agent.name}] Lost! Paying ${command.opponentWallet}...`);
+
+      // Track game
+      agent.recentGames.push({ opponent: opponentName, won: false });
+      if (agent.recentGames.length > 20) agent.recentGames.shift();
+
+      // Only post if talkFirst — other agent responds via ChatListener
+      if (command.talkFirst) {
+        const delay = 1000 + Math.random() * 3000; // 1-4s random delay
+        setTimeout(() => {
+          agent.personality.generateMessage({
+            timing: 'post_loss',
+            opponent: opponentName,
+            amount: command.stakeAmount,
+            balance: 0,
+            recentGames: agent.recentGames,
+          }).then(msg => broadcastMessage(msg));
+        }, delay);
+      }
+
       try {
         const gs = getGameService();
         const txSignature = await gs.payWinner(
@@ -118,6 +170,7 @@ export function createServer(agent: FlipBotAgent): express.Express {
           command.opponentWallet
         );
         console.log(`[${agent.name}] Payment sent: ${txSignature}`);
+        gameTxSignatures.add(txSignature);
         res.json({
           status: 'paid',
           role: 'loser',

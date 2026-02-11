@@ -16,6 +16,8 @@ export const MATCH_INTERVAL_MS = 60_000;
 
 export const MIN_BALANCE_TO_PLAY = GAME_STAKE;
 
+export const MAX_ACTIVE_AGENTS = 20;
+
 export const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
 
 export const SECRETVM_ATTEST_URL = process.env.SECRETVM_ATTEST_URL || 'https://172.17.0.1:29343';

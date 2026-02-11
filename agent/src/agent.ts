@@ -8,11 +8,18 @@ import {
   TEEProvider,
 } from '@proof-of-flip/shared';
 import { StorageProvider, FileStorageProvider } from './persistence';
+import { SecretAIPersonality, PersonalityConfig } from './personality';
+import { randomBytes } from 'crypto';
 import * as fs from 'fs';
+
+const ARCHETYPES: PersonalityConfig['archetype'][] = [
+  'trash_talker', 'humble', 'comedian', 'cocky', 'desperate', 'philosophical',
+];
 
 interface PersistedState {
   secretKey: number[];
   birthCert: BirthCertificate;
+  personalityConfig?: PersonalityConfig;  // sealed in TEE
 }
 
 export class FlipBotAgent {
@@ -22,6 +29,9 @@ export class FlipBotAgent {
   private tee: TEEProvider;
   private storage: StorageProvider;
   private bootTime: number;
+  private personalityConfig: PersonalityConfig | null = null;
+  personality!: SecretAIPersonality;
+  recentGames: Array<{ opponent: string; won: boolean }> = [];
 
   constructor(name: string, teeProvider?: TEEProvider, storage?: StorageProvider) {
     this.name = name;
@@ -80,6 +90,46 @@ export class FlipBotAgent {
       console.log(`[${this.name}] RTMR3: ${this.birthCert.rtmr3}`);
       console.log(`[${this.name}] TEE Pubkey: ${this.birthCert.teePubkey}`);
     }
+
+    // Personality is sealed in TEE persisted state.
+    // On first boot it's determined from env (or random), then locked forever.
+    if (!this.personalityConfig) {
+      // First boot — resolve personality
+      this.personalityConfig = this.resolvePersonality();
+      await this.persistState();
+    }
+    this.personality = new SecretAIPersonality(this.name, this.personalityConfig);
+    console.log(`[${this.name}] Personality sealed in TEE (hidden from outside)`);
+  }
+
+  private resolvePersonality(): PersonalityConfig {
+    const env = process.env.PERSONALITY_ARCHETYPE || 'random';
+
+    // Check for custom fill-in-the-blank fields
+    const description = process.env.PERSONALITY_DESC || '';
+    const tone = process.env.PERSONALITY_TONE || '';
+    const winStyle = process.env.PERSONALITY_WIN_STYLE || '';
+    const loseStyle = process.env.PERSONALITY_LOSE_STYLE || '';
+    const hasCustom = description || tone || winStyle || loseStyle;
+
+    if (env === 'random' && !hasCustom) {
+      // TEE picks its own personality using secure randomness
+      const idx = randomBytes(1)[0] % ARCHETYPES.length;
+      const intensity = 30 + (randomBytes(1)[0] % 71);  // 30-100
+      const friendliness = randomBytes(1)[0] % 101;      // 0-100
+      console.log(`[${this.name}] TEE chose its own personality (hidden)`);
+      return { archetype: ARCHETYPES[idx], intensity, friendliness };
+    }
+
+    return {
+      archetype: (env as PersonalityConfig['archetype']) || 'trash_talker',
+      intensity: parseInt(process.env.PERSONALITY_INTENSITY || '70', 10),
+      friendliness: parseInt(process.env.PERSONALITY_FRIENDLINESS || '50', 10),
+      ...(description && { description }),
+      ...(tone && { tone }),
+      ...(winStyle && { winStyle }),
+      ...(loseStyle && { loseStyle }),
+    };
   }
 
   private async firstBoot(): Promise<void> {
@@ -143,12 +193,14 @@ export class FlipBotAgent {
     const state: PersistedState = JSON.parse(raw);
     this.keypair = Keypair.fromSecretKey(Uint8Array.from(state.secretKey));
     this.birthCert = state.birthCert;
+    this.personalityConfig = state.personalityConfig || null;
   }
 
   private async persistState(): Promise<void> {
     const state: PersistedState = {
       secretKey: Array.from(this.keypair.secretKey),
       birthCert: this.birthCert,
+      personalityConfig: this.personalityConfig || undefined,
     };
     await this.storage.write('agent-state', JSON.stringify(state));
   }
