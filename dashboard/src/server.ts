@@ -1,5 +1,7 @@
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
+import os from 'os';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { registerAgent } from './registry';
@@ -151,6 +153,7 @@ export function createDashboardServer(identity: DashboardIdentity): express.Expr
 
   // POST /api/deploy-agent — Deploy a new agent via SecretVM CLI
   app.post('/api/deploy-agent', async (req, res) => {
+    let tmpFile = '';
     try {
       const { agentName, personality } = req.body;
 
@@ -171,21 +174,45 @@ export function createDashboardServer(identity: DashboardIdentity): express.Expr
 
       const dashboardUrl = process.env.DASHBOARD_PUBLIC_URL || 'https://flip.mrgarbonzo.com';
       const image = process.env.AGENT_IMAGE || 'ghcr.io/mrgarbonzo/proofofflip/agent:latest';
-      console.log(`[Deploy] Deploying agent "${agentName}" via SecretVM CLI...`);
+      const apiKey = process.env.SECRETVM_API_KEY || '';
 
-      let envArgs =
-        ` --env AGENT_NAME="${agentName}"` +
-        ` --env DASHBOARD_URL="${dashboardUrl}"` +
-        ` --env PERSONALITY_ARCHETYPE="${archetype}"` +
-        ` --env TEE_PROVIDER="secretvm"`;
+      // Build environment list for docker-compose
+      const envLines: string[] = [
+        `      - AGENT_NAME=${agentName}`,
+        `      - DASHBOARD_URL=${dashboardUrl}`,
+        `      - PERSONALITY_ARCHETYPE=${archetype}`,
+        `      - TEE_PROVIDER=secretvm`,
+        `      - STORAGE_PATH=/secretvm/data`,
+      ];
+      if (desc) envLines.push(`      - PERSONALITY_DESC=${desc}`);
+      if (tone) envLines.push(`      - PERSONALITY_TONE=${tone}`);
+      if (winStyle) envLines.push(`      - PERSONALITY_WIN_STYLE=${winStyle}`);
+      if (loseStyle) envLines.push(`      - PERSONALITY_LOSE_STYLE=${loseStyle}`);
 
-      if (desc) envArgs += ` --env PERSONALITY_DESC="${desc}"`;
-      if (tone) envArgs += ` --env PERSONALITY_TONE="${tone}"`;
-      if (winStyle) envArgs += ` --env PERSONALITY_WIN_STYLE="${winStyle}"`;
-      if (loseStyle) envArgs += ` --env PERSONALITY_LOSE_STYLE="${loseStyle}"`;
+      const compose = [
+        'services:',
+        '  agent:',
+        `    image: ${image}`,
+        '    ports:',
+        '      - "80:3001"',
+        '    environment:',
+        ...envLines,
+        '    volumes:',
+        '      - agent-data:/secretvm/data',
+        '    restart: unless-stopped',
+        '',
+        'volumes:',
+        '  agent-data:',
+      ].join('\n');
+
+      // Write temp docker-compose file
+      tmpFile = path.join(os.tmpdir(), `deploy-${agentName}-${Date.now()}.yaml`);
+      fs.writeFileSync(tmpFile, compose);
+
+      console.log(`[Deploy] Deploying agent "${agentName}" via secretvm-cli...`);
 
       const { stdout, stderr } = await execAsync(
-        `secretvm deploy ${image} --name ${agentName}${envArgs}`,
+        `secretvm-cli vm create --name ${agentName} --docker-compose ${tmpFile} --persistence --tls -k "${apiKey}"`,
         { timeout: 120_000 }
       );
 
@@ -196,6 +223,8 @@ export function createDashboardServer(identity: DashboardIdentity): express.Expr
     } catch (err: any) {
       console.error('[Deploy] Failed:', err.message);
       res.status(500).json({ success: false, message: err.message });
+    } finally {
+      if (tmpFile) try { fs.unlinkSync(tmpFile); } catch {}
     }
   });
 
