@@ -254,6 +254,13 @@ export function createDashboardServer(identity: DashboardIdentity): express.Expr
       return;
     }
 
+    // Only registered agents can broadcast messages
+    const agent = battlePool.getByName(agentName);
+    if (!agent) {
+      res.status(403).json({ success: false, message: 'Agent not registered' });
+      return;
+    }
+
     broadcast({
       type: urgency === 'desperate' ? 'agent_desperate' : 'trash_talk',
       data: { agent: agentName, message },
@@ -271,11 +278,15 @@ export function createDashboardServer(identity: DashboardIdentity): express.Expr
       return;
     }
 
-    // Update agent's donation total
+    // Only registered agents can confirm donations
     const agent = battlePool.getByName(agentName);
-    if (agent) {
-      agent.totalDonations = (agent.totalDonations || 0) + Number(amount);
+    if (!agent) {
+      res.status(403).json({ success: false, message: 'Agent not registered' });
+      return;
     }
+
+    // Update agent's donation total
+    agent.totalDonations = (agent.totalDonations || 0) + Number(amount);
 
     const shortDonor = donor.length > 12 ? donor.slice(0, 4) + '...' + donor.slice(-4) : donor;
 
