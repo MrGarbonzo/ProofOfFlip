@@ -50,8 +50,8 @@ export async function registerAgent(payload: RegistrationPayload, requestIp?: st
   // ─── Step 1: Verify TEE attestation chain ───
   // This is the core proof of autonomy:
   //   parse quote → validate hardware signature → extract pubkey from report_data
-  //   → verify teeSignature was made by that pubkey → check RTMR3
-  const verification = await verifyBirthCertAttestation(birthCert, rtmr3Allowlist);
+  //   → verify teeSignature was made by that pubkey → verify Docker image matches
+  const verification = await verifyBirthCertAttestation(birthCert, rtmr3Allowlist, lockedAgentImage);
 
   if (!verification.verified) {
     console.warn(`[Registry] TEE verification failed for ${birthCert.agentName}: ${verification.reason}`);
