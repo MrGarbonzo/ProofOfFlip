@@ -226,7 +226,10 @@ export function createDashboardServer(identity: DashboardIdentity): express.Expr
       try {
         const parsed = JSON.parse(stdout);
         if (parsed.status === 'error') {
-          res.status(500).json({ success: false, message: parsed.log || 'secretvm-cli error' });
+          const log = parsed.log;
+          const msg = typeof log === 'string' ? log
+            : log?.message || JSON.stringify(log) || 'secretvm-cli error';
+          res.status(500).json({ success: false, message: msg });
           return;
         }
       } catch {
@@ -235,8 +238,9 @@ export function createDashboardServer(identity: DashboardIdentity): express.Expr
 
       res.json({ success: true, message: `Agent "${agentName}" deployed`, output: stdout });
     } catch (err: any) {
-      console.error('[Deploy] Failed:', err.message);
-      res.status(500).json({ success: false, message: err.message });
+      const errMsg = typeof err?.message === 'string' ? err.message : JSON.stringify(err?.message || err);
+      console.error('[Deploy] Failed:', errMsg);
+      res.status(500).json({ success: false, message: errMsg });
     } finally {
       if (tmpFile) try { fs.unlinkSync(tmpFile); } catch {}
     }
