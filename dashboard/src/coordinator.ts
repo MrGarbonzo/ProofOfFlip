@@ -198,13 +198,31 @@ async function runGame(agentA: AgentInfo, agentB: AgentInfo): Promise<void> {
   });
 }
 
+async function sweepOfflineAgents(): Promise<void> {
+  const offline = battlePool.getAll().filter(a => a.status === 'offline');
+  if (offline.length === 0) return;
+
+  console.log(`[Coordinator] Sweeping ${offline.length} offline agent(s) for deleted VMs...`);
+  for (const agent of offline) {
+    const exists = await checkVmExists(agent.agentName);
+    if (exists === false) {
+      console.log(`[Coordinator] VM for ${agent.agentName} not found — marking deleted`);
+      agent.status = 'deleted';
+    }
+  }
+}
+
 let intervalId: NodeJS.Timeout | null = null;
+let sweepIntervalId: NodeJS.Timeout | null = null;
 
 export function startCoordinator(): void {
   console.log(`[Coordinator] Starting match loop (interval: ${MATCH_INTERVAL_MS / 1000}s)`);
 
   // Initial rank on startup
   battlePool.reRank();
+
+  // Sweep offline agents every 2 minutes to detect deleted VMs
+  sweepIntervalId = setInterval(sweepOfflineAgents, 2 * 60 * 1000);
 
   intervalId = setInterval(async () => {
     // Re-rank before picking (donations may have changed balances)
@@ -234,5 +252,9 @@ export function stopCoordinator(): void {
   if (intervalId) {
     clearInterval(intervalId);
     intervalId = null;
+  }
+  if (sweepIntervalId) {
+    clearInterval(sweepIntervalId);
+    sweepIntervalId = null;
   }
 }
