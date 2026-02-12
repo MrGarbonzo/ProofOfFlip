@@ -19,7 +19,7 @@ function generateGameId(): string {
 
 async function postToAgent(endpoint: string, path: string, body: any): Promise<any> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10_000);
+  const timeout = setTimeout(() => controller.abort(), 30_000);
   try {
     const res = await fetch(`${endpoint}${path}`, {
       method: 'POST',
