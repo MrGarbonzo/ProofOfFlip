@@ -26,19 +26,39 @@ async function main() {
   });
 
   // 3. Register with dashboard (retry on failure)
-  const maxRetries = 5;
-  for (let i = 0; i < maxRetries; i++) {
+  async function tryRegister(): Promise<boolean> {
     const result = await registerWithDashboard(agent, dashboardUrl, agentEndpoint);
     if (result.success) {
       if (result.secretAiKey) {
         agent.personality.setApiKey(result.secretAiKey);
         console.log(`[${agentName}] SecretAI key received from dashboard`);
       }
-      break;
+      return true;
     }
+    return false;
+  }
+
+  const maxRetries = 5;
+  for (let i = 0; i < maxRetries; i++) {
+    if (await tryRegister()) break;
     console.log(`[${agentName}] Retry registration in 5s... (${i + 1}/${maxRetries})`);
     await new Promise(r => setTimeout(r, 5000));
   }
+
+  // Registration heartbeat — re-register if dashboard restarted and lost state
+  setInterval(async () => {
+    try {
+      const res = await fetch(`${dashboardUrl}/api/agents`);
+      const agents = await res.json() as { walletAddress: string }[];
+      const registered = agents.some(a => a.walletAddress === agent.walletAddress);
+      if (!registered) {
+        console.log(`[${agentName}] Not found on dashboard — re-registering...`);
+        await tryRegister();
+      }
+    } catch {
+      // Dashboard unreachable — will retry next interval
+    }
+  }, 2 * 60 * 1000);
 
   // 4. Start donation monitor (skip in mock mode — no real on-chain donations)
   if (process.env.TEE_PROVIDER !== 'mock') {
