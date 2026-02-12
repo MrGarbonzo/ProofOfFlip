@@ -8,23 +8,83 @@ import {
 import { battlePool, leaderboard } from './state';
 import { broadcast } from './sse';
 import { randomBytes } from 'crypto';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
 
 function generateGameId(): string {
   return randomBytes(16).toString('hex');
 }
 
 async function postToAgent(endpoint: string, path: string, body: any): Promise<any> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
   try {
     const res = await fetch(`${endpoint}${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      signal: controller.signal,
     });
     return await res.json();
   } catch (err: any) {
     console.error(`Failed to POST ${endpoint}${path}:`, err.message);
     return null;
+  } finally {
+    clearTimeout(timeout);
   }
+}
+
+async function pingAgent(agent: AgentInfo): Promise<boolean> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 3_000);
+  try {
+    const res = await fetch(`${agent.endpoint}/health`, { signal: controller.signal });
+    return res.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function checkVmExists(agentName: string): Promise<boolean | null> {
+  const apiKey = process.env.SECRET_AI_API_KEY || '';
+  try {
+    const { stdout } = await execAsync(
+      `secretvm-cli vm list -k "${apiKey}"`,
+      { timeout: 10_000 },
+    );
+    const vms = JSON.parse(stdout);
+    if (!Array.isArray(vms)) return null;
+    return vms.some((vm: any) => vm.name === agentName);
+  } catch (err: any) {
+    console.warn(`[Coordinator] checkVmExists failed for ${agentName}:`, err.message);
+    return null;
+  }
+}
+
+function handleDeadAgent(agent: AgentInfo): void {
+  console.log(`[Coordinator] Agent ${agent.agentName} failed health check — marking offline`);
+  battlePool.markOffline(agent.walletAddress);
+  broadcast({
+    type: 'agent_evicted',
+    data: agent,
+    timestamp: Date.now(),
+  });
+
+  // Check if VM was deleted vs just down
+  checkVmExists(agent.agentName).then(exists => {
+    if (exists === false) {
+      console.log(`[Coordinator] VM for ${agent.agentName} not found — marking deleted`);
+      agent.status = 'deleted';
+    } else if (exists === true) {
+      console.log(`[Coordinator] VM for ${agent.agentName} still exists — staying offline`);
+    } else {
+      console.log(`[Coordinator] VM check inconclusive for ${agent.agentName} — staying offline`);
+    }
+  });
 }
 
 async function runGame(agentA: AgentInfo, agentB: AgentInfo): Promise<void> {
@@ -53,7 +113,14 @@ async function runGame(agentA: AgentInfo, agentB: AgentInfo): Promise<void> {
     timestamp,
     talkFirst: winnerTalksFirst,
   };
-  await postToAgent(winner.endpoint, '/play', winnerCommand);
+  const winnerResponse = await postToAgent(winner.endpoint, '/play', winnerCommand);
+
+  // If winner is unreachable, abort game — loser must not pay a dead wallet
+  if (winnerResponse === null) {
+    handleDeadAgent(winner);
+    console.log(`[Coordinator] Game ${gameId} aborted — winner ${winner.agentName} unreachable`);
+    return;
+  }
 
   // Notify loser (they will initiate payment)
   const loserCommand: GameCommand = {
@@ -67,6 +134,11 @@ async function runGame(agentA: AgentInfo, agentB: AgentInfo): Promise<void> {
     talkFirst: !winnerTalksFirst,
   };
   const loserResponse = await postToAgent(loser.endpoint, '/play', loserCommand);
+
+  // If loser is unreachable, mark offline but still record the result
+  if (loserResponse === null) {
+    handleDeadAgent(loser);
+  }
 
   // Record result
   const result: GameResult = {
@@ -143,6 +215,12 @@ export function startCoordinator(): void {
       console.log('[Coordinator] Not enough active agents for a game');
       return;
     }
+
+    // Pre-game health check — ping both agents in parallel
+    const [aAlive, bAlive] = await Promise.all([pingAgent(pair[0]), pingAgent(pair[1])]);
+    if (!aAlive) handleDeadAgent(pair[0]);
+    if (!bAlive) handleDeadAgent(pair[1]);
+    if (!aAlive || !bAlive) return;
 
     try {
       await runGame(pair[0], pair[1]);

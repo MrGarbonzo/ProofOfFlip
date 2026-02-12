@@ -53,7 +53,7 @@ export interface AgentInfo {
   balance: number;
   wins: number;
   losses: number;
-  status: 'active' | 'benched' | 'broke' | 'offline';
+  status: 'active' | 'benched' | 'broke' | 'offline' | 'deleted';
   registeredAt: number;
   personality?: string;
   totalDonations?: number;

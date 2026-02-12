@@ -14,6 +14,9 @@ import { DashboardIdentity } from './identity';
 
 const execAsync = promisify(exec);
 
+const DEPLOY_COOLDOWN_MS = 30 * 60 * 1000; // 30 minutes
+const recentDeploys = new Map<string, number>(); // agentName → timestamp
+
 export function createDashboardServer(identity: DashboardIdentity): express.Express {
   const app = express();
   app.set('trust proxy', true);
@@ -38,21 +41,24 @@ export function createDashboardServer(identity: DashboardIdentity): express.Expr
 
   // GET /api/agents — List all agents
   app.get('/api/agents', (_req, res) => {
-    const agents = battlePool.getAll().map(a => ({
-      agentName: a.agentName,
-      walletAddress: a.walletAddress,
-      balance: a.balance,
-      wins: a.wins,
-      losses: a.losses,
-      status: a.status,
-      registeredAt: a.registeredAt,
-    }));
+    const agents = battlePool.getAll()
+      .filter(a => a.status !== 'deleted')
+      .map(a => ({
+        agentName: a.agentName,
+        walletAddress: a.walletAddress,
+        balance: a.balance,
+        wins: a.wins,
+        losses: a.losses,
+        status: a.status,
+        registeredAt: a.registeredAt,
+      }));
     res.json(agents);
   });
 
   // GET /api/leaderboard — Sorted by balance
   app.get('/api/leaderboard', (_req, res) => {
     const agents = battlePool.getAll()
+      .filter(a => a.status !== 'deleted')
       .sort((a, b) => b.balance - a.balance || (b.wins - b.losses) - (a.wins - a.losses))
       .map((a, i) => ({
         rank: i + 1,
@@ -128,7 +134,7 @@ export function createDashboardServer(identity: DashboardIdentity): express.Expr
 
       // Agent must be registered (active or benched — benched agents still need gas for donations)
       const agent = battlePool.get(walletAddress);
-      if (!agent || agent.status === 'offline') {
+      if (!agent || agent.status === 'offline' || agent.status === 'deleted') {
         res.status(404).json({ success: false, message: 'Agent not found or offline' });
         return;
       }
@@ -167,6 +173,17 @@ export function createDashboardServer(identity: DashboardIdentity): express.Expr
       // Validate agent name (alphanumeric, hyphens, underscores only)
       if (!agentName || !/^[a-zA-Z0-9_-]{1,20}$/.test(agentName)) {
         res.status(400).json({ success: false, message: 'Invalid agent name (alphanumeric, max 20 chars)' });
+        return;
+      }
+
+      // Deploy cooldown — prevent duplicate deploys of same name
+      const lastDeploy = recentDeploys.get(agentName);
+      if (lastDeploy && Date.now() - lastDeploy < DEPLOY_COOLDOWN_MS) {
+        const minutesAgo = Math.ceil((Date.now() - lastDeploy) / 60_000);
+        res.status(409).json({
+          success: false,
+          message: `An agent named "${agentName}" was deployed ${minutesAgo} minutes ago. Please wait or choose a different name.`,
+        });
         return;
       }
 
@@ -255,6 +272,8 @@ export function createDashboardServer(identity: DashboardIdentity): express.Expr
       } catch {
         // stdout is not JSON — that's fine, treat as success
       }
+
+      recentDeploys.set(agentName, Date.now());
 
       res.json({ success: true, message: `Agent "${agentName}" deployed`, output: stdout });
     } catch (err: any) {

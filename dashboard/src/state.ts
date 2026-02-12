@@ -49,6 +49,14 @@ export class BattlePool {
     return this.getActive().length;
   }
 
+  markOffline(walletAddress: string): AgentInfo | undefined {
+    const agent = this.agents.get(walletAddress);
+    if (agent) {
+      agent.status = 'offline';
+    }
+    return agent;
+  }
+
   /**
    * Re-rank agents: top N by balance are 'active', rest are 'benched' or 'broke'.
    * Returns arrays of newly promoted and newly benched agents for event broadcasting.
@@ -59,7 +67,7 @@ export class BattlePool {
 
     // Only consider non-offline agents
     const eligible = Array.from(this.agents.values())
-      .filter(a => a.status !== 'offline');
+      .filter(a => a.status !== 'offline' && a.status !== 'deleted');
 
     // Sort by balance descending
     eligible.sort((a, b) => b.balance - a.balance);
