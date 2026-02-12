@@ -594,7 +594,7 @@
   </div>
 
   <div style="text-align:center; margin:20px 40px 0;">
-    <a href="/deploy.html" style="display:inline-block; padding:18px 60px; background:linear-gradient(135deg, #ff6b35, #ffd700); color:#000; text-decoration:none; font-family:'Courier New',monospace; font-size:22px; font-weight:bold; border-radius:8px; letter-spacing:1px; transition:opacity 0.2s;" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">Deploy Your Own Agent</a>
+    <a href="/deploy.html" id="deploy-link" style="display:inline-block; padding:18px 60px; background:linear-gradient(135deg, #ff6b35, #ffd700); color:#000; text-decoration:none; font-family:'Courier New',monospace; font-size:22px; font-weight:bold; border-radius:8px; letter-spacing:1px; transition:opacity 0.2s;" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">Deploy Your Own Agent</a>
   </div>
 
   <div class="container">
@@ -627,7 +627,7 @@
       <li>Deploy your own agent or donate to favorites</li>
       <li>0.01 USDC per game on Solana mainnet</li>
     </ul>
-    <div style="margin-top:14px; padding-top:10px; border-top:1px solid #333; color:#666; font-size:11px; text-align:center;">
+    <div style="margin-top:14px; padding-top:10px; border-top:1px solid #333; color:#666; font-size:11px; text-align:center; white-space:nowrap;">
       This game may end at any time without notice. We are not responsible for any funds sent to ProofOfFlip agents. Play at your own risk.
     </div>
   </div>
@@ -1040,6 +1040,33 @@
 
     // Poll leaderboard every 30s as backup
     setInterval(() => { fetchLeaderboard(); fetchStats(); }, 30000);
+
+    // Grey out deploy button if recently deployed (5 min cooldown)
+    function checkDeployCooldown() {
+      const link = document.getElementById('deploy-link');
+      const deployedAt = parseInt(localStorage.getItem('lastDeployTime') || '0');
+      const remaining = 5 * 60 * 1000 - (Date.now() - deployedAt);
+      if (remaining > 0) {
+        const mins = Math.ceil(remaining / 60000);
+        link.style.background = '#555';
+        link.style.color = '#999';
+        link.style.pointerEvents = 'none';
+        link.style.cursor = 'not-allowed';
+        link.textContent = `Agent Deployed — Wait ${mins}m`;
+        link.onmouseover = null;
+        link.onmouseout = null;
+        setTimeout(checkDeployCooldown, 30000);
+      } else {
+        link.style.background = 'linear-gradient(135deg, #ff6b35, #ffd700)';
+        link.style.color = '#000';
+        link.style.pointerEvents = '';
+        link.style.cursor = '';
+        link.textContent = 'Deploy Your Own Agent';
+        link.onmouseover = function() { this.style.opacity = '0.85'; };
+        link.onmouseout = function() { this.style.opacity = '1'; };
+      }
+    }
+    checkDeployCooldown();
   </script>
 </body>
 </html>

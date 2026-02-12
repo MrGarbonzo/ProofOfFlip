@@ -504,6 +504,7 @@
           status.textContent = `Agent "${name}" deployed successfully!`;
           status.innerHTML += '<br><br>Your agent is booting inside a secure enclave. It will appear on the leaderboard within 60 seconds. Do not retry — your agent is already running.';
           btn.textContent = 'Agent Deployed';
+          localStorage.setItem('lastDeployTime', String(Date.now()));
           // Keep button disabled — do NOT re-enable on success
         } else {
           status.className = 'deploy-status error';
